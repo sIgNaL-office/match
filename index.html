@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>sIgNaL Match</title>
+<meta name="theme-color" content="#2a3666">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="sIgNaL Match">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* 上部ヘッダー＋画面切替のアプリ。スマホは1列 */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --fg:#1d2433; --muted:#5f6878; --line:#dde2e0;
+  --green:#3f8f68; --accent:#2f6f74; --accent-soft:#e3efec;
+  --s:#b4372f; --a:#c97a12; --b:#2f6f74; --c:#6a7488; --d:#9aa0ab;
+  --warn-bg:#fff4dc; --warn-fg:#7a5400; --err-bg:#fbe9e7;
+  --font-d:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",sans-serif;
+  --font-b:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif;
+  --font-m:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#12161c; --surface:#1b2129; --fg:#e7ebef; --muted:#9aa4b2; --line:#2c3440;
+  --green:#6cc093; --accent:#6cb7b0; --accent-soft:#1f3433;
+  --s:#ef7b72; --a:#e9a64a; --b:#6cb7b0; --c:#9aa4b8; --d:#6e7480;
+  --warn-bg:#3a2f15; --warn-fg:#f1cf82; --err-bg:#3a1f1d; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-b);font-size:14px;line-height:1.6}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px 64px}
+header.top{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .inner{max-width:1040px;margin:0 auto;padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.brand{display:flex;align-items:center;gap:8px;font-family:var(--font-d);font-weight:700;font-size:16px;white-space:nowrap}
+.brand img{width:28px;height:auto}
+nav.tabs{display:flex;gap:4px;flex-wrap:wrap}
+nav.tabs button,nav.tabs a{font:inherit;font-weight:500;border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:999px;cursor:pointer;text-decoration:none}
+nav.tabs [aria-current="true"]{background:var(--accent-soft);color:var(--accent)}
+.who{margin-left:auto;font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.who button{font:inherit;border:0;background:none;color:var(--accent);cursor:pointer;padding:0}
+select,input,textarea{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+textarea{resize:vertical}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1{font-family:var(--font-d);font-size:21px;margin:20px 0 4px;text-wrap:balance}
+h2{font-family:var(--font-d);font-size:16px;margin:0 0 10px}
+.sub{color:var(--muted);margin:0 0 14px;font-size:13px}
+.btn{font:inherit;font-weight:700;border:0;border-radius:6px;padding:9px 16px;cursor:pointer;background:var(--accent);color:var(--surface);text-decoration:none;display:inline-block}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn.sm{padding:5px 11px;font-size:12.5px}
+.btn[disabled]{opacity:.55;cursor:wait}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.filters select,.filters input{width:auto;min-width:120px}
+.filters input{flex:1}
+.list{display:grid;gap:8px}
+.item{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:11px 14px;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
+.item:hover{border-color:var(--accent)}
+.item.norank{grid-template-columns:1fr auto}
+.rank{width:40px;height:40px;border-radius:8px;display:grid;place-items:center;font-family:var(--font-m);font-weight:500;font-size:18px;color:#fff;background:var(--line)}
+.rank.S{background:var(--s)}.rank.A{background:var(--a)}.rank.B{background:var(--b)}.rank.C{background:var(--c)}.rank.D{background:var(--d)}
+.rank.none{color:var(--muted);background:transparent;border:1px dashed var(--line)}
+.item .t{font-weight:700}
+.item .m{font-size:12.5px;color:var(--muted);display:block}
+.price{font-family:var(--font-m);font-variant-numeric:tabular-nums;font-weight:500;text-align:right;white-space:nowrap}
+.chip{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-left:6px;font-weight:500;vertical-align:1px;white-space:nowrap}
+.chip.priv{border-color:var(--s);color:var(--s)}
+.chip.need{border-color:var(--warn-fg);color:var(--warn-fg);background:var(--warn-bg)}
+.subtabs{display:flex;border-bottom:1px solid var(--line);margin-bottom:16px;overflow-x:auto}
+.subtabs button{font:inherit;font-weight:700;border:0;background:transparent;color:var(--muted);padding:10px 16px;border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+.subtabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--green)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px 16px}
+.f{min-width:0}
+.f>label,.f>.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:3px;font-weight:500}
+.f.full{grid-column:1/-1}
+.f .other{margin-top:6px}
+.checks{display:flex;flex-wrap:wrap;gap:6px 14px}
+.checks label,.inline{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg);font-weight:400}
+.checks input,.inline input{width:auto}
+.f.auto input,.f.auto select,.f.auto textarea{border-color:var(--green);background:var(--accent-soft)}
+.f.auto>label::after,.f.auto>.lbl::after{content:"読取";margin-left:6px;font-size:10.5px;color:var(--green);border:1px solid var(--green);border-radius:4px;padding:0 4px}
+.f.tbc input:not([type=checkbox]),.f.tbc select,.f.tbc textarea{border:2px solid var(--s)}
+.f.tbc>label,.f.tbc>.lbl{color:var(--s)}
+.f.tbc>label::after,.f.tbc>.lbl::after{content:"要確認";margin-left:6px;font-size:10.5px;color:#fff;background:var(--s);border-radius:4px;padding:0 5px}
+.grp{border:1px solid transparent;border-radius:6px;padding:6px 8px}
+.grp.auto{border-color:var(--green);background:var(--accent-soft)}
+.grp.tbc{border:2px solid var(--s)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin:6px 0 2px}
+.lg::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+.lg.auto::before{border:1px solid var(--green);background:var(--accent-soft)}
+.lg.tbc::before{border:2px solid var(--s)}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:16px;text-align:center;color:var(--muted);display:grid;align-content:center;gap:4px}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop input{border:0;padding:6px 0;background:transparent}
+.drop small{font-size:11.5px}
+.section-label{font-size:11.5px;letter-spacing:.08em;color:var(--green);font-weight:700;margin:18px 0 8px}
+details.more{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+details.more summary{cursor:pointer;font-weight:700;font-size:13px;color:var(--accent)}
+details.more .grid{margin-top:12px}
+.note{background:var(--warn-bg);color:var(--warn-fg);font-size:12.5px;padding:8px 12px;border-radius:6px;margin:8px 0}
+.err{background:var(--err-bg);color:var(--s);font-size:13px;padding:10px 12px;border-radius:6px;margin:10px 0}
+.dtabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 14px}
+.dtabs button{font:inherit;font-size:13px;font-weight:500;border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer}
+.dtabs button[aria-selected="true"]{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.back{font:inherit;border:0;background:none;color:var(--accent);cursor:pointer;padding:0;margin-top:16px}
+.sheet-wrap{overflow-x:auto;background:#e9ecea;border-radius:8px;padding:16px}
+.sheet-wrap>div{box-shadow:0 2px 10px rgba(0,0,0,.08);padding:16px;min-width:600px}
+.cands{display:grid;gap:8px}
+.cand{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px}
+.cand .n{font-family:var(--font-m);color:var(--green);font-size:18px}
+.cand .why{font-size:12.5px;color:var(--muted)}
+.cand a{color:var(--fg);font-weight:700;text-decoration:none;cursor:pointer}
+.score{font-family:var(--font-m);font-size:13px;text-align:right;display:grid;gap:6px;justify-items:end}
+.bar{height:6px;width:90px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--green)}
+.ranknote{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
+pre.msg{white-space:pre-wrap;font-family:var(--font-b);font-size:13px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0 0 8px;min-height:80px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two>*{min-width:0}
+@media (max-width:720px){.two{grid-template-columns:1fr}}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.log{width:100%;border-collapse:collapse;font-size:13px}
+.log th,.log td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+.log th{color:var(--muted);font-weight:500;font-size:12px;white-space:nowrap}
+.files{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;margin-top:8px}
+.files a{color:var(--accent)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 18px;border-radius:999px;font-size:13px;z-index:20;max-width:92vw;text-align:center}
+.empty{color:var(--muted);padding:28px 16px;text-align:center;background:var(--surface);border:1px dashed var(--line);border-radius:8px}
+.center{max-width:440px;margin:12vh auto 0;text-align:center;display:grid;gap:14px;justify-items:center}
+.center img{width:90px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (max-width:560px){.item{grid-template-columns:40px 1fr}.item .price{grid-column:2;text-align:left}.who{margin-left:0}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<header class="top" id="hdr" hidden><div class="inner">
+  <div class="brand"><img id="logo" alt="sIgNaL">Match</div>
+  <nav class="tabs" aria-label="画面">
+    <button data-go="list">案件一覧</button>
+    <button data-go="new">登録</button>
+    <button data-go="buyers">取引先</button>
+    <a id="sheetLink" target="_blank" rel="noopener" hidden>スプレッドシート</a>
+  </nav>
+  <div class="who"><span id="meName"></span><button id="logout">ログアウト</button></div>
+</div></header>
+<main class="wrap" id="app"><div class="center"><span><span class="spin"></span>読み込み中…</span></div></main>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+/* ホーム画面アプリ版：サーバー（Googleのアプリ）とはインターネット経由でやりとりします */
+const API_URL = 'https://script.google.com/macros/s/AKfycbznDnBUtfSJ6APtJGYg8-GRNaoa171an6m5WZtFELlzQFRevQT1gp28_5Gomj68m9-2/exec';
+const BOOT = (() => {
+  const q = new URLSearchParams(location.search); const t = (q.get('t') || '').replace(/[^A-Za-z0-9_\-.=]/g, '');
+  if (q.has('t')) history.replaceState(null, '', location.pathname);
+  return { logo: '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', token: t, loginUrl: 'https://script.google.com/macros/s/AKfycbxxUhoJGuXWimo1qCrOQtGUHnflmVMD1XPe4hhnaFD2v5_pDnW64cqiVd-d6HgKMvtojQ/exec?r=match' };
+})();
+</script>
+<script>
+/* ===== 基本 ===== */
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ls = { get(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } }, set(k,v){ try { v ? localStorage.setItem(k,v) : localStorage.removeItem(k); } catch(e){} } };
+let TOKEN = BOOT.token || ls.get('sg_token');
+if (BOOT.token) ls.set('sg_token', BOOT.token);
+const S = { view: 'list', listKind: 'deal', newKind: 'deal', dtab: 'gaiyo', cache: {} };
+
+function toast(t, ms){ const e = $('#toast'); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, ms || 2600); }
+function api(action, args){
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: TOKEN, action: action, args: args || {} }), redirect: 'follow' })
+    .then(r => { if (!r.ok) throw new Error('サーバーの応答がありません（' + r.status + '）'); return r.json(); }, () => { throw new Error('通信に失敗しました。電波の良いところでもう一度お試しください'); })
+    .then(r => {
+      if (r && r.error) {
+        if (r.error === 'LOGIN') { showLogin(); throw new Error('ログインが必要です'); }
+        if (/^NOUSER:/.test(r.error)) { showNoUser(r.error.slice(7)); throw new Error('利用者に登録されていません'); }
+        throw new Error(r.error);
+      }
+      return r;
+    });
+}
+function busy(btn, on, label){ if (!btn) return; if (on){ btn.dataset.l = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span>' + (label || '処理中…'); } else { btn.disabled = false; btn.innerHTML = btn.dataset.l || btn.innerHTML; } }
+const userName = email => (S.users.find(u => u.email === email) || {}).name || email || '';
+const yen = man => { const n = Number(String(man).replace(/[^\d.]/g, '')); if (!man || isNaN(n)) return '価格要確認'; return n >= 10000 ? (n / 10000).toFixed(2).replace(/\.?0+$/, '') + '億円' : n.toLocaleString() + '万円'; };
+const specs = kind => S.specs[kind];
+const missingReq = (kind, r) => specs(kind).some(s => s.req && (r[s.k] === '' || r[s.k] == null));
+
+/* ===== ログイン ===== */
+function showLogin(){
+  $('#hdr').hidden = true;
+  ls.set('sg_token', '');
+  $('#app').innerHTML = `<div class="center"><img src="data:image/png;base64,${LOGO}" alt="sIgNaL"><h1>sIgNaL Match</h1>
+    ${BOOT.loginUrl ? `<p class="sub">Googleアカウントで本人確認をしてから開きます。</p><a class="btn" href="${esc(BOOT.loginUrl)}" >Googleアカウントで開始</a><p class="sub">確認は30日ごとに1回です。</p>`
+    : `<p class="sub">ログインの設定がまだ終わっていません。管理者に連絡してください。</p>`}</div>`;
+}
+function showNoUser(email){
+  $('#hdr').hidden = true;
+  $('#app').innerHTML = `<div class="center"><img src="data:image/png;base64,${LOGO}" alt="sIgNaL"><h1>利用者に登録されていません</h1>
+    <p class="sub">このGoogleアカウント（${esc(email)}）は、まだ利用者に登録されていません。管理者にこのアカウントを伝えて、登録してもらってください。</p>
+    ${BOOT.loginUrl ? `<a class="btn ghost" href="${esc(BOOT.loginUrl)}" >別のアカウントで開始</a>` : ''}</div>`;
+}
+$('#logout').onclick = () => { TOKEN = ''; showLogin(); };
+
+/* ===== 起動 ===== */
+function boot(){
+  if (!TOKEN) { showLogin(); return; }
+  api('init').then(d => {
+    Object.assign(S, d);
+    LOGO = d.logo || LOGO;
+    $('#hdr').hidden = false;
+    $('#meName').textContent = S.me.name + (S.me.admin ? '（管理者）' : '');
+    const sl = $('#sheetLink'); if (S.sheetUrl) { sl.href = S.sheetUrl; sl.hidden = false; }
+    go(S.view === 'detail' ? 'list' : S.view);
+  }).catch(e => { if (!/ログイン|登録されていません/.test(e.message)) $('#app').innerHTML = `<div class="err">${esc(e.message)}</div><button class="btn" onclick="boot()">もう一度読み込む</button>`; });
+}
+function refresh(){ return api('init').then(d => { Object.assign(S, d); }); }
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+function go(view, opt){
+  S.view = view; Object.assign(S, opt || {});
+  document.querySelectorAll('[data-go]').forEach(b => b.setAttribute('aria-current', b.dataset.go === view || (view === 'detail' && b.dataset.go === (S.dkind === 'buyer' ? 'buyers' : 'list'))));
+  ({ list: renderList, new: renderNew, buyers: renderBuyers, detail: renderDetail })[view]();
+  window.scrollTo(0, 0);
+}
+
+/* ===== 一覧 ===== */
+function renderList(){
+  const k = S.listKind;
+  const rows = k === 'deal' ? S.deals : S.needs;
+  const statuses = specs(k).find(s => s.k === 'status').o;
+  $('#app').innerHTML = `<h1>案件一覧</h1>
+    <p class="sub">ランクはS〜Dの優先度です。「社内非公開」は担当者と管理者にだけ表示されます。</p>
+    <div class="subtabs" role="tablist">
+      <button role="tab" data-lk="deal" aria-selected="${k==='deal'}">売り情報（${S.deals.length}）</button>
+      <button role="tab" data-lk="need" aria-selected="${k==='need'}">買ニーズ（${S.needs.length}）</button></div>
+    <div class="filters">
+      <input id="q" type="search" placeholder="物件名・所在地・顧客名で探す" aria-label="検索">
+      <select id="fo" aria-label="担当者"><option value="">全担当者</option>${S.users.map(u => `<option value="${esc(u.email)}">${esc(u.name)}</option>`).join('')}</select>
+      <select id="fs" aria-label="ステータス"><option value="">全ステータス</option>${statuses.map(s => `<option>${s}</option>`).join('')}</select>
+      <select id="fsort" aria-label="並び順">${[['new', '登録日が新しい順'], ['old', '登録日が古い順'], ['rank', '優先度順（S→D）']].map(([v, t]) => `<option value="${v}"${(S.sort || 'new') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+    </div>
+    <div class="list" id="rows"></div>`;
+  document.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => { S.listKind = b.dataset.lk; renderList(); });
+  const draw = () => {
+    const q = $('#q').value.trim(), fo = $('#fo').value, fs = $('#fs').value;
+    const list = rows.filter(r => (!fo || r.owner === fo) && (!fs || r.status === fs) && (!q || JSON.stringify([r.title, r.addr, r.client, r.area, r.id]).indexOf(q) >= 0));
+    S.sort = $('#fsort').value;
+    const age = r => String(r.created || '') + ' ' + String(r.id || '');
+    const rk = r => { const i = S.ranks.indexOf(r.rank); return i < 0 ? 99 : i; };
+    list.sort((a, b) => S.sort === 'old' ? (age(a) < age(b) ? -1 : 1)
+      : S.sort === 'rank' ? (rk(a) - rk(b) || (age(a) < age(b) ? 1 : -1))
+      : (age(a) < age(b) ? 1 : -1));
+    $('#rows').innerHTML = list.length ? list.map(r => k === 'deal' ? `
+      <button class="item" data-id="${esc(r.id)}">
+        <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
+        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
+          <span class="m">${esc([r.shubetsu, '担当 ' + userName(r.owner), r.shoryu, '回答' + (S.respCount[r.id] || 0) + '件'].filter(Boolean).join('・'))}</span></span>
+        <span class="price">${yen(r.price)}</span></button>` : `
+      <button class="item" data-id="${esc(r.id)}">
+        <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
+        <span style="min-width:0"><span class="t">${esc(r.client || '（顧客名 要確認）')}</span>${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${r.status && r.status !== '探索中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('need', r) ? '<span class="chip need">要確認あり</span>' : ''}
+          <span class="m">${esc([r.types, r.area, '担当 ' + userName(r.owner)].filter(Boolean).join('・'))}</span></span>
+        <span class="price">${esc(r.budget ? r.budget + '万円' : '予算要確認')}</span></button>`).join('')
+      : `<div class="empty">${rows.length ? '条件に合う案件はありません。' : (k === 'deal' ? 'まだ売り情報がありません。上の「登録」から、販売図面などの資料を入れて最初の案件を登録してください。' : 'まだ買ニーズがありません。「登録 → 買ニーズ」から、買主の文面やスクショで登録できます。')}</div>`;
+    document.querySelectorAll('#rows .item').forEach(b => b.onclick = () => go('detail', { dkind: k, did: b.dataset.id, dtab: k === 'deal' ? 'gaiyo' : 'info' }));
+  };
+  ['q', 'fo', 'fs', 'fsort'].forEach(id => $('#' + id).oninput = draw);
+  draw();
+}
+
+function renderBuyers(){
+  const adm = S.me.admin;
+  const regKey = b => b.regBy || S.me.email;
+  const regs = adm ? [...new Set(S.buyers.map(regKey))] : [];
+  $('#app').innerHTML = `<h1>取引先</h1><p class="sub">仕入会社の条件と、紹介・回答の実績です。条件を変更すると、前の内容は履歴として残ります。${adm ? '管理者なので、全員が登録した取引先が表示されています。' : 'ここには、あなたが登録した取引先だけが表示されます。'}</p>
+    <div class="filters"><input id="q" type="search" placeholder="会社名・エリア・得意分野で探す" aria-label="検索">${adm ? `<select id="fr" aria-label="登録した人"><option value="">全員の取引先</option>${regs.map(e => `<option value="${esc(e)}">${esc(userName(e))}の取引先</option>`).join('')}</select>` : ''}<button class="btn sm" id="addB">取引先を登録</button></div>
+    <div class="list" id="rows"></div>`;
+  $('#addB').onclick = () => go('new', { newKind: 'buyer' });
+  const draw = () => {
+    const q = $('#q').value.trim(), fr = adm ? $('#fr').value : '';
+    const list = S.buyers.filter(b => (!fr || regKey(b) === fr) && (!q || JSON.stringify([b.co, b.area, b.good, b.style, b.person]).indexOf(q) >= 0));
+    $('#rows').innerHTML = list.length ? list.map(b => `<button class="item norank" data-id="${esc(b.id)}">
+      <span style="min-width:0"><span class="t">${esc(b.co)}</span>${b.style ? `<span class="chip">${esc(b.style)}</span>` : ''}${missingReq('buyer', b) ? '<span class="chip need">要確認あり</span>' : ''}
+      <span class="m">${esc([b.good, b.area, b.size, adm && '登録 ' + userName(regKey(b))].filter(Boolean).join('・'))}</span></span>
+      <span class="m" style="text-align:right;max-width:12em;overflow-wrap:anywhere">${esc(b.person || '')}</span></button>`).join('')
+      : `<div class="empty">${S.buyers.length ? '条件に合う取引先はありません。' : 'まだ取引先がありません。名刺の写真や先方からの文面で登録できます。紹介先の自動選定は、ここに登録した取引先から選びます。'}</div>`;
+    document.querySelectorAll('#rows .item').forEach(b => b.onclick = () => go('detail', { dkind: 'buyer', did: b.dataset.id, dtab: 'info' }));
+  };
+  $('#q').oninput = draw; if (adm) $('#fr').oninput = draw; draw();
+}
+
+/* ===== 入力フォーム（登録・編集で共通） ===== */
+const NEW_TEXT = {
+  deal: { paste: '業者から来た文面を貼り付け（物件紹介のメール・LINEなど）', ph: '例：新規物件のご紹介です。練馬区○○2丁目 土地29.79坪 8,980万円 …', drop: '販売図面・謄本・公図・測量図・スクショなど', save: '登録して概要書を作成' },
+  need: { paste: '買主から来た文面を貼り付け', ph: '例：城南・城西エリアでRC一棟を探しています。予算3〜5億、表面利回り5%以上、旧耐震は不可です。', drop: 'LINEやメールのスクショ、購入条件の資料', save: '買ニーズを登録' },
+  buyer: { paste: '先方から来た文面を貼り付け（仕入条件・署名など）', ph: '例：弊社は城北・埼玉南部で土地を買取し、建売を建築しています。30坪前後、1〜3億が中心です。（署名）○○ホーム 仕入部 山田', drop: '名刺の写真、仕入条件の資料、LINE・メールのスクショ', save: '取引先を登録' }
+};
+
+function fieldHtml(sp, p){
+  const id = p + '-' + sp.k;
+  const full = sp.full || sp.t === 'checks' || sp.t === 'textarea' || sp.t === 'check';
+  const wrap = (inner, lab) => `<div class="f${full ? ' full' : ''}${sp.t === 'checks' ? ' grp' : ''}" data-k="${sp.k}">${lab === false ? '' : `<label for="${id}">${esc(sp.l)}</label>`}${inner}</div>`;
+  switch (sp.t) {
+    case 'select': return wrap(`<select id="${id}"><option value="">選択してください</option>${sp.o.map(o => `<option>${esc(o)}</option>`).join('')}</select>${sp.other ? `<input id="${id}-other" class="other" placeholder="商流を入力（例：売主→元付→A→B→sIgNaL）" hidden>` : ''}`);
+    case 'user': return wrap(`<select id="${id}"><option value="">選択してください</option>${S.users.map(u => `<option value="${esc(u.email)}">${esc(u.name)}</option>`).join('')}</select>`);
+    case 'checks': return `<div class="f full grp" data-k="${sp.k}"><span class="lbl">${esc(sp.l)}</span><div class="checks">${sp.o.map((o, i) => `<label><input type="checkbox" id="${id}-${i}" value="${esc(o)}">${esc(o)}</label>`).join('')}</div></div>`;
+    case 'check': return `<div class="f full" data-k="${sp.k}"><label class="inline"><input type="checkbox" id="${id}">${esc(sp.l)}</label></div>`;
+    case 'textarea': return wrap(`<textarea id="${id}" rows="3" placeholder="${esc(sp.ph || '')}"></textarea>`);
+    default: return wrap(`<input id="${id}" ${sp.num ? 'inputmode="decimal"' : ''} placeholder="${esc(sp.ph || '')}">`);
+  }
+}
+function getVal(sp, p){
+  const id = p + '-' + sp.k, el = document.getElementById(id);
+  if (sp.t === 'checks') return sp.o.filter((o, i) => document.getElementById(id + '-' + i).checked).join('、');
+  if (sp.t === 'check') return el.checked ? 'はい' : '';
+  if (sp.t === 'select' && sp.other && el.value === 'その他') return document.getElementById(id + '-other').value.trim();
+  return el.value.trim();
+}
+function setVal(sp, p, v){
+  const id = p + '-' + sp.k, el = document.getElementById(id);
+  v = v == null ? '' : v;
+  if (sp.t === 'checks') { const arr = Array.isArray(v) ? v : String(v).split(/[、,]/).map(x => x.trim()); sp.o.forEach((o, i) => document.getElementById(id + '-' + i).checked = arr.indexOf(o) >= 0); return true; }
+  if (sp.t === 'check') { el.checked = v === 'はい' || v === true; return true; }
+  if (sp.t === 'select' || sp.t === 'user') {
+    const opts = [...el.options].map(o => o.value);
+    if (v === '' || opts.indexOf(String(v)) >= 0) { el.value = v; if (sp.other) document.getElementById(id + '-other').hidden = true; return true; }
+    if (sp.other) { el.value = 'その他'; const o = document.getElementById(id + '-other'); o.hidden = false; o.value = v; return true; }
+    return false;
+  }
+  el.value = sp.num && v !== '' ? String(v).replace(/[^\d.]/g, '') : v;
+  return true;
+}
+const isEmpty = (sp, p) => getVal(sp, p) === '';
+function mark(sp, p, st){
+  const f = document.querySelector(`#${p}-form [data-k="${sp.k}"]`); if (!f) return;
+  f.classList.remove('auto', 'tbc'); if (st) f.classList.add(st);
+}
+
+function formHtml(kind, p, opt){
+  const t = NEW_TEXT[kind];
+  const sp = specs(kind);
+  const main = sp.filter(s => !s.d), det = sp.filter(s => s.d);
+  return `<div id="${p}-form">
+   ${opt.readonly ? '' : `
+   <div class="section-label">${opt.edit ? '資料を追加して読み取る（空いている欄だけ埋めます）' : 'まず資料・文面を入れる'}</div>
+   <div class="two">
+    <div class="drop" id="${p}-drop"><label for="${p}-files">${t.drop}（PDF・画像）</label><input id="${p}-files" type="file" multiple accept=".pdf,image/*"><small>この枠にドラッグ、またはスクショを Ctrl+V で貼り付けもできます</small><div id="${p}-filelist" style="font-size:12.5px"></div></div>
+    <div class="f"><label for="${p}-paste">${t.paste}</label><textarea id="${p}-paste" rows="5" placeholder="${esc(t.ph)}"></textarea></div>
+   </div>
+   <div class="row" style="margin:10px 0 4px"><button class="btn ghost sm" id="${p}-read">資料・文面から読み取る</button><span class="sub" style="margin:0">資料を選ぶと自動で読み取ります（30秒ほど）。文面だけのときはボタンを押してください。</span></div>
+   <div id="${p}-note"></div>
+   <div class="legend"><span class="lg auto">読み取り済み</span><span class="lg tbc">要確認（読み取れなかった項目・選んでほしい項目）</span></div>`}
+   <div class="section-label">${KIND_LABEL[kind]}の内容</div>
+   <div class="grid">${main.map(s => fieldHtml(s, p)).join('')}</div>
+   ${det.length ? `<details class="more" id="${p}-more"><summary>概要書の詳細項目（土地・建物・法規制・取引条件・備考）</summary><div class="grid">${det.map(s => fieldHtml(s, p)).join('')}</div></details>` : ''}
+   ${opt.readonly ? '<p class="note">この案件は担当者と管理者だけが編集できます。</p>' : `<div class="row" style="margin-top:16px"><button class="btn" id="${p}-save">${opt.edit ? '変更を保存' : t.save}</button><span class="sub" style="margin:0" id="${p}-savehint"></span></div>`}
+  </div>`;
+}
+const KIND_LABEL = { deal: '売り情報', need: '買ニーズ', buyer: '取引先' };
+
+function bindForm(kind, p, rec, opt){
+  const sp = specs(kind);
+  const st = { fileIds: [] };
+  sp.forEach(s => {
+    const v = rec ? rec[s.k] : (s.def || (s.t === 'user' && kind !== 'buyer' ? S.me.email : ''));
+    setVal(s, p, v);
+  });
+  if (rec && det(sp).some(s => rec[s.k])) { const m = $('#' + p + '-more'); if (m) m.open = true; }
+  if (opt.readonly) { document.querySelectorAll(`#${p}-form input,#${p}-form select,#${p}-form textarea`).forEach(e => e.disabled = true); return; }
+  // 編集時は、空いている必須項目を赤枠で見せる
+  if (rec) sp.forEach(s => { if (s.req && isEmpty(s, p)) mark(s, p, 'tbc'); });
+  // 手で触ったらマークを消す
+  document.querySelectorAll(`#${p}-form .f`).forEach(f => { const clr = () => f.classList.remove('auto', 'tbc'); f.addEventListener('input', clr); f.addEventListener('change', clr); });
+  sp.filter(s => s.other).forEach(s => { const sel = $(`#${p}-${s.k}`); sel.addEventListener('change', () => { const o = $(`#${p}-${s.k}-other`); o.hidden = sel.value !== 'その他'; if (!o.hidden) o.focus(); }); });
+
+  // 読み取り
+  const fi = $(`#${p}-files`), readBtn = $(`#${p}-read`), drop = $(`#${p}-drop`);
+  const run = async files => {
+    const text = $(`#${p}-paste`).value.trim();
+    if (!files.length && !text) { toast('資料を選ぶか、文面を貼り付けてください'); return; }
+    busy(readBtn, true, '読み取り中…');
+    try {
+      const payload = await Promise.all(files.map(prepFile));
+      const size = payload.reduce((n, f) => n + f.data.length, 0);
+      if (size > 30e6) throw new Error('資料が大きすぎます（合計20MBほどまで）。ページ数を減らすか、何回かに分けて読み取ってください');
+      const r = await api('extract', { kind, files: payload, text });
+      st.fileIds = st.fileIds.concat(r.fileIds || []);
+      applyRead(kind, p, r);
+      toast('読み取りました。赤枠の項目を確認してください');
+    } catch (e) { toast(e.message, 6000); }
+    busy(readBtn, false);
+  };
+  const addFiles = list => {
+    const files = [...list].filter(f => f.type === 'application/pdf' || /^image\//.test(f.type));
+    const bad = files.filter(f => /heic|heif/i.test(f.type + f.name));
+    if (bad.length) { toast('HEIC形式の写真は読み取れません。スクショか、JPEGで保存した写真を使ってください', 6000); }
+    const ok = files.filter(f => bad.indexOf(f) < 0);
+    if (!ok.length) return;
+    const fl = $(`#${p}-filelist`); fl.textContent = (fl.textContent ? fl.textContent + '、' : '') + ok.map(f => f.name || '貼り付けた画像').join('、');
+    run(ok);
+  };
+  fi.onchange = () => { addFiles(fi.files); fi.value = ''; };
+  readBtn.onclick = () => run([]);
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); });
+  PASTE_TARGET = list => addFiles(list);
+
+  // 保存
+  let confirmAt = 0;
+  $(`#${p}-save`).onclick = async e => {
+    const btn = e.currentTarget;
+    const n = document.querySelectorAll(`#${p}-form .f.tbc`).length;
+    if (n && Date.now() - confirmAt > 5000) { confirmAt = Date.now(); $(`#${p}-savehint`).textContent = `要確認の項目が${n}件あります。このまま保存する場合は、もう一度押してください（要確認のまま残ります）`; return; }
+    const out = {}; sp.forEach(s => { out[s.k] = getVal(s, p); });
+    if (rec) out.id = rec.id;
+    busy(btn, true, '保存中…');
+    try {
+      const r = await api('saveRecord', { kind, rec: out, fileIds: st.fileIds });
+      st.fileIds = [];
+      await refresh();
+      toast(rec ? '保存しました' : '登録しました');
+      opt.onSaved && opt.onSaved(r.rec);
+    } catch (err) { toast(err.message, 6000); busy(btn, false); }
+  };
+}
+const det = sp => sp.filter(s => s.d);
+let PASTE_TARGET = null;
+document.addEventListener('paste', e => {
+  if (!PASTE_TARGET || !e.clipboardData) return;
+  const files = [...e.clipboardData.files].filter(f => /^image\//.test(f.type));
+  if (files.length) { e.preventDefault(); PASTE_TARGET(files); }
+});
+
+function applyRead(kind, p, r){
+  const sp = specs(kind);
+  const check = r.check || [];
+  let detailTouched = false;
+  sp.forEach(s => {
+    const v = r.fields[s.k];
+    const has = v != null && v !== '' && !(Array.isArray(v) && !v.length);
+    if (has && isEmpty(s, p)) {
+      const ok = setVal(s, p, v);
+      mark(s, p, ok ? (check.indexOf(s.k) >= 0 ? 'tbc' : 'auto') : 'tbc');
+      if (s.d) detailTouched = true;
+    } else if (has && check.indexOf(s.k) >= 0) mark(s, p, 'tbc');
+    else if (s.req && isEmpty(s, p)) mark(s, p, 'tbc');
+  });
+  if (detailTouched) { const m = $('#' + p + '-more'); if (m) m.open = true; }
+  $(`#${p}-note`).innerHTML = r.note ? `<p class="note">AIのメモ：${esc(r.note)}</p>` : '';
+}
+
+// 画像は長辺2000pxまで縮めて送る（通信量を減らす）
+function prepFile(f){
+  return new Promise((res, rej) => {
+    const rd = new FileReader();
+    rd.onerror = () => rej(new Error('ファイルを読み込めませんでした：' + f.name));
+    rd.onload = () => {
+      const url = rd.result;
+      if (f.type === 'application/pdf' || !/^image\/(jpeg|png|webp|gif)$/.test(f.type)) return res({ name: f.name || 'file.pdf', mimeType: f.type, data: url.split(',')[1] });
+      const img = new Image();
+      img.onload = () => {
+        const sc = Math.min(1, 2000 / Math.max(img.width, img.height));
+        if (sc === 1 && f.size < 3e6) return res({ name: f.name || '貼り付けた画像.png', mimeType: f.type, data: url.split(',')[1] });
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        res({ name: (f.name || '貼り付けた画像').replace(/\.\w+$/, '') + '.jpg', mimeType: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.88).split(',')[1] });
+      };
+      img.onerror = () => res({ name: f.name, mimeType: f.type, data: url.split(',')[1] });
+      img.src = url;
+    };
+    rd.readAsDataURL(f);
+  });
+}
+
+/* ===== 登録 ===== */
+function renderNew(){
+  const k = S.newKind;
+  $('#app').innerHTML = `<h1>登録</h1><p class="sub">登録の種類を選んでください。</p>
+    <div class="subtabs" role="tablist">${Object.entries(KIND_LABEL).map(([kk, t]) => `<button role="tab" data-nk="${kk}" aria-selected="${k === kk}">${kk === 'buyer' ? '新規取引先' : t}</button>`).join('')}</div>
+    <div class="panel">${formHtml(k, 'nf', {})}</div>`;
+  document.querySelectorAll('[data-nk]').forEach(b => b.onclick = () => { S.newKind = b.dataset.nk; renderNew(); });
+  bindForm(k, 'nf', null, { onSaved: rec => {
+    if (k === 'deal') go('detail', { dkind: 'deal', did: rec.id, dtab: 'cands', autoMatch: rec.id });
+    else if (k === 'need') go('list', { listKind: 'need' });
+    else go('buyers');
+  }});
+}
+
+/* ===== 詳細 ===== */
+async function renderDetail(){
+  const kind = S.dkind, id = S.did;
+  PASTE_TARGET = null;
+  $('#app').innerHTML = `<button class="back" id="back">← ${kind === 'buyer' ? '取引先' : '案件一覧'}</button><div style="margin-top:20px"><span class="spin"></span>読み込み中…</div>`;
+  $('#back').onclick = () => go(kind === 'buyer' ? 'buyers' : 'list');
+  let d;
+  try { d = await api('getRecord', { kind, id }); } catch (e) { $('#app').insertAdjacentHTML('beforeend', `<div class="err">${esc(e.message)}</div>`); return; }
+  S.cur = d;
+  drawDetail();
+}
+function drawDetail(){
+  const kind = S.dkind, d = S.cur, r = d.rec;
+  const tabs = kind === 'deal' ? { gaiyo: '物件概要書', info: '案件情報', cands: '紹介先の候補', msgs: '紹介文', resp: '回答の記録' }
+             : kind === 'buyer' ? { info: '取引先情報', hist: '変更履歴', resp: '紹介・回答の実績' } : { info: '買ニーズ情報' };
+  if (!tabs[S.dtab]) S.dtab = Object.keys(tabs)[0];
+  const title = kind === 'deal' ? (r.title || '（物件名 要確認）') : kind === 'need' ? (r.client || '（顧客名 要確認）') : r.co;
+  const sub = kind === 'deal' ? [r.id, '担当 ' + userName(r.owner), r.shoryu, r.source && '情報元 ' + r.source, yen(r.price), r.status]
+            : kind === 'need' ? [r.id, '担当 ' + userName(r.owner), r.shoryu, r.budget && '予算 ' + r.budget + '万円', r.status]
+            : [r.id, r.style, r.person, r.contact];
+  $('#app').innerHTML = `<button class="back" id="back">← ${kind === 'buyer' ? '取引先' : '案件一覧'}</button>
+    <h1>${kind !== 'buyer' ? `<span class="rank ${r.rank || 'none'}" style="display:inline-grid;width:30px;height:30px;font-size:15px;vertical-align:3px;margin-right:8px">${esc(r.rank || '－')}</span>` : ''}${esc(title)}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}</h1>
+    <p class="sub">${esc(sub.filter(Boolean).join('・'))}</p>
+    ${Object.keys(tabs).length > 1 ? `<div class="dtabs" role="tablist">${Object.entries(tabs).map(([k, t]) => `<button role="tab" data-dt="${k}" aria-selected="${S.dtab === k}">${t}</button>`).join('')}</div>` : ''}
+    <div id="dbody"></div>`;
+  $('#back').onclick = () => go(kind === 'buyer' ? 'buyers' : 'list');
+  document.querySelectorAll('[data-dt]').forEach(b => b.onclick = () => { S.dtab = b.dataset.dt; drawDetail(); });
+  PASTE_TARGET = null;
+  ({ gaiyo: tabGaiyo, info: tabInfo, cands: tabCands, msgs: tabMsgs, resp: tabResp, hist: tabHist })[S.dtab]();
+}
+const filesHtml = files => files && files.length ? `<div class="files">資料：${files.map(f => `<a href="#" data-fid="${esc(f.id)}">${esc(f.name)}</a>`).join('')}</div>` : '';
+// 資料をアプリ経由でダウンロード（ドライブの共有リクエストなし）
+function saveFile(x){
+  const bin = atob(x.data), buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([buf], { type: x.mimeType || 'application/octet-stream' }));
+  const a = document.createElement('a'); a.href = url; a.download = x.name || 'download'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+async function downloadFile(el, fileId){
+  const label = el.textContent; el.textContent = 'ダウンロード準備中…'; el.style.pointerEvents = 'none';
+  try { saveFile(await api('fileData', { kind: S.dkind, id: S.cur.rec.id, fileId: fileId || '' })); }
+  catch (err) { toast(err.message, 6000); }
+  el.textContent = label; el.style.pointerEvents = '';
+}
+function bindFiles(){ document.querySelectorAll('[data-fid]').forEach(a => a.onclick = e => { e.preventDefault(); downloadFile(a, a.dataset.fid); }); }
+
+function tabGaiyo(){
+  const d = S.cur, r = d.rec;
+  $('#dbody').innerHTML = `<div class="row" style="margin-bottom:10px">
+      <button class="btn sm" id="mkpdf">PDFを作成</button>
+      ${r.pdf ? `<button class="btn ghost sm" id="dlpdf">前回作ったPDFをダウンロード</button>` : ''}
+      ${r.folder && S.me.admin ? `<a class="btn ghost sm" href="${esc(r.folder)}" target="_blank" rel="noopener">資料フォルダを開く</a>` : ''}
+    </div>
+    <p class="sub">${r.feeShow === 'はい' ? '仲介手数料を載せています。' : '仲介手数料は空欄です。載せる場合は「案件情報」の詳細項目で設定してください。'}「要確認」は資料から読み取れなかった必須項目です。</p>
+    <div class="sheet-wrap"><div style="background:#fff">${d.overview}</div></div>`;
+  $('#mkpdf').onclick = async e => {
+    const b = e.currentTarget; busy(b, true, 'PDFを作成中…');
+    try { const x = await api('makePdf', { id: r.id }); r.pdf = x.url; r.folder = r.folder || x.folder; tabGaiyo(); downloadFile($('#dlpdf'), ''); toast('PDFを作成しました。ダウンロードが始まらない場合は「前回作ったPDFをダウンロード」を押してください'); }
+    catch (err) { toast(err.message, 6000); busy(b, false); }
+  };
+  const dl = $('#dlpdf'); if (dl) dl.onclick = () => downloadFile(dl, '');
+}
+
+function tabInfo(){
+  const kind = S.dkind, d = S.cur;
+  $('#dbody').innerHTML = `<div class="panel">${formHtml(kind, 'ef', { edit: true, readonly: !d.canEdit })}${filesHtml(d.files)}</div>`;
+  bindForm(kind, 'ef', d.rec, { readonly: !d.canEdit, onSaved: () => renderDetail() });
+  bindFiles();
+}
+
+function tabCands(){
+  const d = S.cur, r = d.rec, m = d.match;
+  const answered = {}; (d.responses || []).slice().reverse().forEach(x => { answered[x.buyerId] = x.result; });
+  $('#dbody').innerHTML = `<p class="sub">登録済みの取引先の仕入条件と、これまでの回答（買付金額・見送り理由）から、紹介する順番を提案します。${m ? `（${esc(m.at)} 時点）` : ''}</p>
+    <div class="row" style="margin-bottom:12px"><button class="btn sm" id="runm">${m ? 'もう一度選び直す' : 'AIで紹介先を選ぶ'}</button></div>
+    ${m ? `
+      ${m.rank ? `<div class="ranknote"><span class="rank ${m.rank}">${m.rank}</span><span class="why" style="font-size:13px">AIのランク提案：${esc(m.rankReason)}</span>${d.canEdit && r.rank !== m.rank ? `<button class="btn ghost sm" id="setr">このランクにする</button>` : ''}</div>` : ''}
+      <h2>紹介先の候補</h2>
+      <div class="cands">${m.candidates.length ? m.candidates.map((c, i) => `<div class="cand"><span class="n">${i + 1}</span>
+        <div style="min-width:0"><a data-buyer="${esc(c.id)}">${esc(c.name)}</a>${answered[c.id] ? `<span class="chip">${esc(answered[c.id])}</span>` : ''}<div class="why">${esc(c.reason)}</div></div>
+        <div class="score">適合度 ${c.score}<div class="bar"><i style="width:${c.score}%"></i></div>${answered[c.id] ? '' : `<button class="btn ghost sm" data-intro="${esc(c.id)}">紹介した</button>`}</div></div>`).join('') : '<div class="empty">合いそうな取引先は見つかりませんでした。</div>'}</div>
+      ${m.needs.length ? `<h2 style="margin-top:18px">条件が合いそうな買ニーズ</h2><div class="cands">${m.needs.map(n => `<div class="cand" style="grid-template-columns:1fr"><div><a data-need="${esc(n.id)}">${esc(n.name)}</a><div class="why">${esc(n.reason)}</div></div></div>`).join('')}</div>` : ''}`
+    : '<div class="empty">まだ選定していません。「AIで紹介先を選ぶ」を押してください（30秒ほどかかります）。</div>'}`;
+  $('#runm').onclick = async e => { const b = e.currentTarget; busy(b, true, '選定中…'); try { d.match = await api('match', { id: r.id }); tabCands(); } catch (err) { toast(err.message, 6000); busy(b, false); } };
+  // 新しく登録した案件は、開いたらすぐAIで紹介先を選ぶ
+  if (S.autoMatch === r.id && !m) { S.autoMatch = ''; toast('登録しました。AIが紹介先の候補を選んでいます（30秒ほど）'); $('#runm').click(); }
+  const sr = $('#setr'); if (sr) sr.onclick = async () => { try { const x = await api('setRank', { id: r.id, rank: m.rank }); d.rec = x.rec; await refresh(); drawDetail(); toast('ランクを ' + m.rank + ' にしました'); } catch (err) { toast(err.message, 6000); } };
+  document.querySelectorAll('[data-intro]').forEach(b => b.onclick = async () => { busy(b, true, '記録中…'); try { const x = await api('addResponse', { dealId: r.id, buyerId: b.dataset.intro, result: S.results[0] }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabCands(); toast('紹介済みとして記録しました'); } catch (err) { toast(err.message, 6000); busy(b, false); } });
+  document.querySelectorAll('[data-buyer]').forEach(a => a.onclick = () => go('detail', { dkind: 'buyer', did: a.dataset.buyer, dtab: 'info' }));
+  document.querySelectorAll('[data-need]').forEach(a => a.onclick = () => go('detail', { dkind: 'need', did: a.dataset.need, dtab: 'info' }));
+}
+
+function tabMsgs(){
+  const d = S.cur, r = d.rec;
+  const cands = (d.match && d.match.candidates) || [];
+  const opts = cands.map(c => ({ id: c.id, name: c.name })).concat(S.buyers.filter(b => !cands.some(c => c.id === b.id)).map(b => ({ id: b.id, name: b.co })));
+  $('#dbody').innerHTML = `<p class="sub">LINE用とメール用の紹介文を作ります。手数料・商流・社内メモは文章に入りません。</p>
+    <div class="row" style="margin-bottom:12px"><select id="mb" style="width:auto;max-width:100%"><option value="">宛先を指定しない</option>${opts.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('')}</select><button class="btn sm" id="mk">紹介文を作成</button></div>
+    <div id="mout">${S.msg && S.msg.id === r.id ? msgHtml(S.msg) : ''}</div>`;
+  $('#mk').onclick = async e => { const b = e.currentTarget; busy(b, true, '作成中…'); try { const x = await api('messages', { id: r.id, buyerId: $('#mb').value }); S.msg = Object.assign({ id: r.id }, x); $('#mout').innerHTML = msgHtml(S.msg); bindCopy(); } catch (err) { toast(err.message, 6000); } busy(b, false); };
+  bindCopy();
+}
+const msgHtml = x => `<div class="two"><div><h2>LINE用</h2><pre class="msg" id="m-line">${esc(x.line)}</pre><button class="btn sm" data-copy="m-line">コピー</button></div>
+  <div><h2>メール用</h2><pre class="msg" id="m-mail">件名：${esc(x.subject)}\n\n${esc(x.body)}</pre><button class="btn sm" data-copy="m-subj" data-text="${esc(x.subject)}">件名をコピー</button> <button class="btn sm" data-copy="m-body" data-text="${esc(x.body)}">本文をコピー</button></div></div>`;
+function bindCopy(){
+  document.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => {
+    const el = document.getElementById(b.dataset.copy);
+    const text = b.dataset.text != null ? b.dataset.text : el.textContent;
+    const fallback = () => { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e) {} ta.remove(); toast(ok ? 'コピーしました' : '文章を長押しして選び、コピーしてください'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => toast('コピーしました')).catch(fallback); else fallback();
+  });
+}
+
+function tabResp(){
+  const d = S.cur, kind = S.dkind;
+  if (kind === 'buyer') {
+    $('#dbody').innerHTML = `<div class="tbl-wrap"><table class="log"><tr><th>日時</th><th>案件</th><th>回答</th><th>金額</th><th>理由・メモ</th><th>記録者</th></tr>
+      ${d.responses.length ? d.responses.map(x => `<tr><td>${esc(x.at)}</td><td>${esc(x.dealTitle)}</td><td>${esc(x.result)}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}</td><td>${esc(x.by)}</td></tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">まだ紹介の記録はありません</td></tr>'}</table></div>`;
+    return;
+  }
+  const r = d.rec;
+  const cands = (d.match && d.match.candidates) || [];
+  const opts = cands.map(c => ({ id: c.id, name: c.name })).concat(S.buyers.filter(b => !cands.some(c => c.id === b.id)).map(b => ({ id: b.id, name: b.co })));
+  $('#dbody').innerHTML = `<p class="sub">紹介先からの回答を記録します。ここに溜まった買付金額や見送り理由が、次からの紹介先の選定に使われます。</p>
+    <div class="panel"><div class="grid">
+      <div class="f"><label for="r-b">紹介先</label><select id="r-b"><option value="">選択してください</option>${opts.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('')}</select></div>
+      <div class="f"><label for="r-r">回答</label><select id="r-r">${S.results.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
+      <div class="f"><label for="r-a">買付・仕入金額</label><input id="r-a" placeholder="例：8,500万円"></div>
+      <div class="f"><label for="r-w">見送り理由・メモ</label><input id="r-w" placeholder="例：容積が足りない、価格が合わない"></div>
+    </div><div style="margin-top:12px"><button class="btn sm" id="r-add">回答を記録</button></div></div>
+    <div class="tbl-wrap" style="margin-top:12px"><table class="log"><tr><th>日時</th><th>紹介先</th><th>回答</th><th>金額</th><th>理由・メモ</th><th>記録者</th></tr>
+    ${d.responses.length ? d.responses.map(x => `<tr><td>${esc(x.at)}</td><td>${esc(x.buyerName)}</td><td>${esc(x.result)}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}</td><td>${esc(x.by)}</td></tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">まだ回答はありません</td></tr>'}</table></div>`;
+  $('#r-add').onclick = async e => {
+    if (!$('#r-b').value) { toast('紹介先を選んでください'); return; }
+    const b = e.currentTarget; busy(b, true, '記録中…');
+    try { const x = await api('addResponse', { dealId: r.id, buyerId: $('#r-b').value, result: $('#r-r').value, amount: $('#r-a').value, reason: $('#r-w').value }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabResp(); toast('記録しました'); }
+    catch (err) { toast(err.message, 6000); busy(b, false); }
+  };
+}
+
+function tabHist(){
+  const d = S.cur;
+  $('#dbody').innerHTML = `<p class="sub">条件や担当者を変更すると、前の内容がここに残ります。</p><div class="tbl-wrap"><table class="log"><tr><th>日時</th><th>項目</th><th>変更前</th><th>変更後</th><th>変更者</th></tr>
+    ${d.history.length ? d.history.map(h => `<tr><td>${esc(h.at)}</td><td>${esc(h.field)}</td><td>${esc(h.before)}</td><td>${esc(h.after)}</td><td>${esc(h.by)}</td></tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted)">まだ変更はありません</td></tr>'}</table></div>`;
+}
+
+let LOGO = BOOT.logo || '';
+$('#logo').src = 'data:image/png;base64,' + LOGO;
+boot();
+</script>
+<script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));</script>
+</body>
+</html>
