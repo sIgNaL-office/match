@@ -118,6 +118,18 @@ details.more .grid{margin-top:12px}
 .score{font-family:var(--font-m);font-size:13px;text-align:right;display:grid;gap:6px;justify-items:end}
 .bar{height:6px;width:90px;background:var(--line);border-radius:3px;overflow:hidden}
 .bar i{display:block;height:100%;background:var(--green)}
+.badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:999px;background:var(--s);color:#fff;font-size:11px;line-height:18px;text-align:center;font-weight:700}
+.xcard{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:8px}
+.xpair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.xpair>div{min-width:0;border-left:3px solid var(--line);padding-left:8px}
+.xpair>div.other{border-left-color:var(--accent)}
+.xpair .lbl{display:block;font-size:11px;color:var(--muted);margin-bottom:2px}
+.xpair a{color:var(--fg);font-weight:700;text-decoration:none;cursor:pointer}
+.xpair .why,.xcard .why{font-size:12.5px;color:var(--muted);overflow-wrap:anywhere}
+.xhead{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.xhead .score{display:flex;gap:8px;align-items:center}
+.xsec{display:grid;gap:8px;margin-bottom:22px}
+@media (max-width:560px){.xpair{grid-template-columns:1fr}}
 .ranknote{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 pre.msg{white-space:pre-wrap;font-family:var(--font-b);font-size:13px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0 0 8px;min-height:80px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -146,6 +158,7 @@ pre.msg{white-space:pre-wrap;font-family:var(--font-b);font-size:13px;background
     <button data-go="list">案件一覧</button>
     <button data-go="new">登録</button>
     <button data-go="buyers">取引先</button>
+    <button data-go="xm">社内マッチ<span class="badge" id="xb" hidden></span></button>
     <a id="sheetLink" target="_blank" rel="noopener" hidden>スプレッドシート</a>
   </nav>
   <div class="who"><span id="meName"></span><button id="logout">ログアウト</button></div>
@@ -215,15 +228,17 @@ function boot(){
     $('#hdr').hidden = false;
     $('#meName').textContent = S.me.name + (S.me.admin ? '（管理者）' : '');
     const sl = $('#sheetLink'); if (S.sheetUrl) { sl.href = S.sheetUrl; sl.hidden = false; }
+    xBadge();
     go(S.view === 'detail' ? 'list' : S.view);
   }).catch(e => { if (!/ログイン|登録されていません/.test(e.message)) $('#app').innerHTML = `<div class="err">${esc(e.message)}</div><button class="btn" onclick="boot()">もう一度読み込む</button>`; });
 }
-function refresh(){ return api('init').then(d => { Object.assign(S, d); }); }
+function refresh(){ return api('init').then(d => { Object.assign(S, d); xBadge(); }); }
+function xBadge(){ const b = $('#xb'); if (b) { b.textContent = S.xAsk || ''; b.hidden = !S.xAsk; } }
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 function go(view, opt){
   S.view = view; Object.assign(S, opt || {});
   document.querySelectorAll('[data-go]').forEach(b => b.setAttribute('aria-current', b.dataset.go === view || (view === 'detail' && b.dataset.go === (S.dkind === 'buyer' ? 'buyers' : 'list'))));
-  ({ list: renderList, new: renderNew, buyers: renderBuyers, detail: renderDetail })[view]();
+  ({ list: renderList, new: renderNew, buyers: renderBuyers, detail: renderDetail, xm: renderX })[view]();
   window.scrollTo(0, 0);
 }
 
@@ -486,9 +501,71 @@ function renderNew(){
   document.querySelectorAll('[data-nk]').forEach(b => b.onclick = () => { S.newKind = b.dataset.nk; renderNew(); });
   bindForm(k, 'nf', null, { onSaved: rec => {
     if (k === 'deal') go('detail', { dkind: 'deal', did: rec.id, dtab: 'cands', autoMatch: rec.id });
-    else if (k === 'need') go('list', { listKind: 'need' });
-    else go('buyers');
+    else if (k === 'need') { xBg('need', rec.id); go('list', { listKind: 'need' }); }
+    else { xBg('buyer', rec.id); go('buyers'); }
   }});
+}
+
+/* ===== 社内マッチ ===== */
+const XK = { deal: '物件', need: '買ニーズ', buyer: '取引先' };
+// 登録した情報を、他の営業の情報と裏で照らし合わせる（待たずに画面を進める）
+function xBg(kind, id){
+  api('crossMatch', { kind, id }).then(x => {
+    if (x.found) { toast('他の営業の情報と ' + x.found + ' 件マッチしました。「社内マッチ」で確認できます', 7000); refresh(); }
+  }).catch(() => {});
+}
+function bindRunX(kind, id){
+  const b = $('#runx'); if (!b) return;
+  b.onclick = async () => {
+    busy(b, true, '照らし合わせ中…（30秒ほど）');
+    try { const x = await api('crossMatch', { kind, id }); toast(x.found ? x.found + ' 件マッチしました。「社内マッチ」で確認できます' : '条件が合う他の営業の情報はありませんでした', 6000); busy(b, false); if (x.found) refresh(); }
+    catch (e) { toast(e.message, 6000); busy(b, false); }
+  };
+}
+async function renderX(){
+  $('#app').innerHTML = `<h1>社内マッチ</h1>
+    <p class="sub">他の営業が持っている物件・買ニーズ・取引先のうち、あなたの情報と条件が合うものです。相手の情報は、公開されるまで概要だけが表示されます。気になるものは担当者に連絡したうえで「公開を依頼」してください。担当者か管理者が承認すると、あなたにだけ公開されます。</p>
+    <div id="xbody"><span class="spin"></span>読み込み中…</div>`;
+  try { S.x = await api('xList'); } catch (e) { $('#xbody').innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  drawX();
+}
+function xCard(c){
+  return c.see ? `<a data-open="${c.kind}:${esc(c.id)}">${esc(c.name || '（名称 要確認）')}</a><div class="why">${esc(c.sum)}</div>`
+               : `<b>${XK[c.kind]}（非公開）</b><div class="why">${esc(c.sum || '概要なし')}</div>`;
+}
+const xScore = n => `<span class="score">マッチ度 ${n}%<span class="bar"><i style="width:${n}%"></i></span></span>`;
+function drawX(){
+  const d = S.x, adm = S.me.admin;
+  const stChip = s => s === '依頼中' ? '<span class="chip">公開を依頼中</span>' : s === '見送り' ? '<span class="chip">今回は見送り</span>' : '';
+  const asks = d.asks.length ? `<h2>あなたへの公開の依頼（${d.asks.length}件）</h2><div class="xsec">${d.asks.map(a => `
+    <div class="xcard"><div class="xhead"><b>${esc(a.who)}さんが公開を希望しています</b>${xScore(a.score)}</div>
+      <div class="xpair"><div><span class="lbl">公開する情報（${esc(a.whatOwner)}さんの${XK[a.what.kind]}）</span>${xCard(a.what)}</div>
+        <div class="other"><span class="lbl">${esc(a.who)}さんの${XK[a.forCard.kind]}</span>${xCard(a.forCard)}</div></div>
+      ${a.reason ? `<div class="why">${esc(a.reason)}</div>` : ''}
+      <div class="row"><button class="btn sm" data-dec="${esc(a.id)}:${a.side}:1">${esc(a.who)}さんに公開する</button><button class="btn ghost sm" data-dec="${esc(a.id)}:${a.side}:0">今回は見送る</button></div></div>`).join('')}</div>` : '';
+  const mine = `<h2>あなたの情報とのマッチ（${d.mine.length}件）</h2><div class="xsec">${d.mine.length ? d.mine.map(m => `
+    <div class="xcard"><div class="xhead"><span class="why">${esc(m.at)}</span>${xScore(m.score)}</div>
+      <div class="xpair"><div><span class="lbl">あなたの${XK[m.my.kind]}</span>${xCard(m.my)}</div>
+        <div class="other"><span class="lbl">${esc(m.owner)}さんの${XK[m.other.kind]}</span>${xCard(m.other)}</div></div>
+      ${m.reason ? `<div class="why">${esc(m.reason)}</div>` : ''}
+      <div class="row">${m.other.see ? '<span class="chip">公開済み</span>' : m.state === '依頼中' || m.state === '見送り' ? stChip(m.state) : `<button class="btn sm" data-req="${esc(m.id)}:${m.side}">公開を依頼</button>`}
+        ${m.given ? '' : `<button class="btn ghost sm" data-give="${esc(m.id)}:${m.side === 'deal' ? 't' : 'deal'}">自分の${XK[m.my.kind]}を${esc(m.owner)}さんに見せる</button>`}
+        <span class="why">担当 ${esc(m.owner)}${m.mobile ? '（' + esc(m.mobile) + '）' : ''}</span></div></div>`).join('')
+    : '<div class="empty">まだマッチはありません。物件・買ニーズ・取引先を新しく登録すると、他の営業の情報と自動で照らし合わせます。</div>'}</div>`;
+  const all = adm ? `<h2>社内全体のマッチ（管理者だけに表示・${d.all.length}件）</h2><div class="xsec">${d.all.length ? d.all.map(a => `
+    <div class="xcard"><div class="xhead"><span class="why">${esc(a.at)}</span>${xScore(a.score)}</div>
+      <div class="xpair"><div><span class="lbl">${esc(a.dealOwner)}さんの物件 ${stChip(a.dealReq) || (a.dealReq === '公開済み' ? '<span class="chip">相手に公開済み</span>' : '')}</span>${xCard(a.deal)}</div>
+        <div class="other"><span class="lbl">${esc(a.tOwner)}さんの${XK[a.t.kind]} ${stChip(a.tReq) || (a.tReq === '公開済み' ? '<span class="chip">相手に公開済み</span>' : '')}</span>${xCard(a.t)}</div></div>
+      ${a.reason ? `<div class="why">${esc(a.reason)}</div>` : ''}</div>`).join('') : '<div class="empty">まだありません。</div>'}</div>` : '';
+  $('#xbody').innerHTML = asks + mine + all;
+  document.querySelectorAll('[data-open]').forEach(a => a.onclick = () => { const [k, id] = a.dataset.open.split(':'); go('detail', { dkind: k, did: id, dtab: k === 'deal' ? 'gaiyo' : 'info' }); });
+  const act = (sel, fn, msg) => document.querySelectorAll(sel).forEach(b => b.onclick = async () => {
+    busy(b, true, '送信中…');
+    try { await fn(b); toast(msg(b)); await refresh(); S.x = await api('xList'); drawX(); } catch (e) { toast(e.message, 6000); busy(b, false); }
+  });
+  act('[data-req]', b => { const [id, side] = b.dataset.req.split(':'); return api('xRequest', { id, side }); }, () => '公開を依頼しました。担当者か管理者が承認すると見られるようになります');
+  act('[data-dec]', b => { const [id, side, ok] = b.dataset.dec.split(':'); return api('xDecide', { id, side, ok: ok === '1' }); }, b => b.dataset.dec.slice(-1) === '1' ? '公開しました（相手の営業にだけ見えます）' : '見送りにしました');
+  act('[data-give]', b => { const [id, side] = b.dataset.give.split(':'); return api('xDecide', { id, side, ok: true }); }, () => '相手の営業にだけ公開しました');
 }
 
 /* ===== 詳細 ===== */
@@ -557,16 +634,18 @@ function tabGaiyo(){
 
 function tabInfo(){
   const kind = S.dkind, d = S.cur;
-  $('#dbody').innerHTML = `<div class="panel">${formHtml(kind, 'ef', { edit: true, readonly: !d.canEdit })}${filesHtml(d.files)}</div>`;
+  const xbtn = d.canEdit && kind !== 'deal' ? '<div class="row" style="margin-bottom:12px"><button class="btn ghost sm" id="runx">他の営業の物件と照らし合わせる</button></div>' : '';
+  $('#dbody').innerHTML = `${xbtn}<div class="panel">${formHtml(kind, 'ef', { edit: true, readonly: !d.canEdit })}${filesHtml(d.files)}</div>`;
   bindForm(kind, 'ef', d.rec, { readonly: !d.canEdit, onSaved: () => renderDetail() });
   bindFiles();
+  if (xbtn) bindRunX(kind, d.rec.id);
 }
 
 function tabCands(){
   const d = S.cur, r = d.rec, m = d.match;
   const answered = {}; (d.responses || []).slice().reverse().forEach(x => { answered[x.buyerId] = x.result; });
   $('#dbody').innerHTML = `<p class="sub">登録済みの取引先の仕入条件と、これまでの回答（買付金額・見送り理由）から、紹介する順番を提案します。${m ? `（${esc(m.at)} 時点）` : ''}</p>
-    <div class="row" style="margin-bottom:12px"><button class="btn sm" id="runm">${m ? 'もう一度選び直す' : 'AIで紹介先を選ぶ'}</button></div>
+    <div class="row" style="margin-bottom:12px"><button class="btn sm" id="runm">${m ? 'もう一度選び直す' : 'AIで紹介先を選ぶ'}</button>${d.canEdit ? '<button class="btn ghost sm" id="runx">他の営業の買ニーズ・取引先と照らし合わせる</button>' : ''}</div>
     ${m ? `
       ${m.rank ? `<div class="ranknote"><span class="rank ${m.rank}">${m.rank}</span><span class="why" style="font-size:13px">AIのランク提案：${esc(m.rankReason)}</span>${d.canEdit && r.rank !== m.rank ? `<button class="btn ghost sm" id="setr">このランクにする</button>` : ''}</div>` : ''}
       <h2>紹介先の候補</h2>
@@ -577,7 +656,8 @@ function tabCands(){
     : '<div class="empty">まだ選定していません。「AIで紹介先を選ぶ」を押してください（30秒ほどかかります）。</div>'}`;
   $('#runm').onclick = async e => { const b = e.currentTarget; busy(b, true, '選定中…'); try { d.match = await api('match', { id: r.id }); tabCands(); } catch (err) { toast(err.message, 6000); busy(b, false); } };
   // 新しく登録した案件は、開いたらすぐAIで紹介先を選ぶ
-  if (S.autoMatch === r.id && !m) { S.autoMatch = ''; toast('登録しました。AIが紹介先の候補を選んでいます（30秒ほど）'); $('#runm').click(); }
+  if (S.autoMatch === r.id && !m) { S.autoMatch = ''; toast('登録しました。AIが紹介先の候補を選んでいます（30秒ほど）'); $('#runm').click(); xBg('deal', r.id); }
+  bindRunX('deal', r.id);
   const sr = $('#setr'); if (sr) sr.onclick = async () => { try { const x = await api('setRank', { id: r.id, rank: m.rank }); d.rec = x.rec; await refresh(); drawDetail(); toast('ランクを ' + m.rank + ' にしました'); } catch (err) { toast(err.message, 6000); } };
   document.querySelectorAll('[data-intro]').forEach(b => b.onclick = async () => { busy(b, true, '記録中…'); try { const x = await api('addResponse', { dealId: r.id, buyerId: b.dataset.intro, result: S.results[0] }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabCands(); toast('紹介済みとして記録しました'); } catch (err) { toast(err.message, 6000); busy(b, false); } });
   document.querySelectorAll('[data-buyer]').forEach(a => a.onclick = () => go('detail', { dkind: 'buyer', did: a.dataset.buyer, dtab: 'info' }));
