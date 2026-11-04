@@ -548,11 +548,12 @@ function drawX(){
       <div class="xpair"><div><span class="lbl">あなたの${XK[m.my.kind]}</span>${xCard(m.my)}</div>
         <div class="other"><span class="lbl">${esc(m.owner)}さんの${XK[m.other.kind]}</span>${xCard(m.other)}</div></div>
       ${m.reason ? `<div class="why">${esc(m.reason)}</div>` : ''}
-      <div class="row">${m.other.see ? '<span class="chip">公開済み</span>' : m.state === '依頼中' || m.state === '見送り' ? stChip(m.state) : `<button class="btn sm" data-req="${esc(m.id)}:${m.side}">公開を依頼</button>`}
+      <div class="row">${m.other.see ? (adm ? '' : '<span class="chip">公開済み</span>') : m.state === '依頼中' || m.state === '見送り' ? stChip(m.state) : `<button class="btn sm" data-req="${esc(m.id)}:${m.side}">公開を依頼</button>`}
         ${m.given ? '' : `<button class="btn ghost sm" data-give="${esc(m.id)}:${m.side === 'deal' ? 't' : 'deal'}">自分の${XK[m.my.kind]}を${esc(m.owner)}さんに見せる</button>`}
         <span class="why">担当 ${esc(m.owner)}${m.mobile ? '（' + esc(m.mobile) + '）' : ''}</span></div></div>`).join('')
     : '<div class="empty">まだマッチはありません。物件・買ニーズ・取引先を新しく登録すると、他の営業の情報と自動で照らし合わせます。</div>'}</div>`;
-  const all = adm ? `<h2>社内全体のマッチ（管理者だけに表示・${d.all.length}件）</h2><div class="xsec">${d.all.length ? d.all.map(a => `
+  const others = d.all.filter(a => a.dealOwner !== S.me.name && a.tOwner !== S.me.name);
+  const all = adm ? `<h2>他の営業どうしのマッチ（管理者だけに表示・${others.length}件）</h2><div class="xsec">${others.length ? others.map(a => `
     <div class="xcard"><div class="xhead"><span class="why">${esc(a.at)}</span>${xScore(a.score)}</div>
       <div class="xpair"><div><span class="lbl">${esc(a.dealOwner)}さんの物件 ${stChip(a.dealReq) || (a.dealReq === '公開済み' ? '<span class="chip">相手に公開済み</span>' : '')}</span>${xCard(a.deal)}</div>
         <div class="other"><span class="lbl">${esc(a.tOwner)}さんの${XK[a.t.kind]} ${stChip(a.tReq) || (a.tReq === '公開済み' ? '<span class="chip">相手に公開済み</span>' : '')}</span>${xCard(a.t)}</div></div>
