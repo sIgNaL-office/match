@@ -355,6 +355,23 @@ function mark(sp, p, st){
   f.classList.remove('auto', 'tbc'); if (st) f.classList.add(st);
 }
 
+// 取引態様は商流から決まる（売主→当社の流れ＝媒介、当社売主・三為売主＝売主）。決まらないときだけ担当者が選ぶ
+function torihikiOf(shoryu){ return /^売主→/.test(shoryu) ? '媒介' : (shoryu === '当社売主' || shoryu === '当社三為売主') ? '売主' : ''; }
+function syncTorihiki(p){
+  const sh = $(`#${p}-shoryu`), tr = $(`#${p}-torihiki`); if (!sh || !tr) return null;
+  const box = tr.closest('.f'); let note = box.querySelector('.tnote');
+  if (!note) { note = document.createElement('div'); note.className = 'tnote'; note.style.cssText = 'font-size:12px;color:var(--muted);margin-top:4px'; box.appendChild(note); }
+  const f = () => {
+    const v = getVal(specs('deal').find(s => s.k === 'shoryu'), p), t = torihikiOf(v);
+    const so = [...tr.options].find(o => o.value === '売主');
+    if (t) { if (so) so.disabled = false; tr.value = t; tr.disabled = true; box.classList.remove('tbc'); }
+    else { tr.disabled = false; if (so) so.disabled = true; if (tr.value === '売主') tr.value = ''; }
+    note.textContent = t ? (v === '当社三為売主' ? '商流から「売主」に決まります（概要書の備考に「弊社三為売主案件」と入ります）' : '商流から「' + t + '」に決まります')
+      : '商流から決められないので選んでください。当社が売主の案件は、商流で「当社売主」か「当社三為売主」を選ぶと「売主」になります';
+  };
+  sh.addEventListener('change', f); const o = $(`#${p}-shoryu-other`); if (o) o.addEventListener('input', f);
+  f(); return f;
+}
 function formHtml(kind, p, opt){
   const t = NEW_TEXT[kind];
   const sp = specs(kind);
@@ -391,6 +408,7 @@ function bindForm(kind, p, rec, opt){
   // 手で触ったらマークを消す
   document.querySelectorAll(`#${p}-form .f`).forEach(f => { const clr = () => f.classList.remove('auto', 'tbc'); f.addEventListener('input', clr); f.addEventListener('change', clr); });
   sp.filter(s => s.other).forEach(s => { const sel = $(`#${p}-${s.k}`); sel.addEventListener('change', () => { const o = $(`#${p}-${s.k}-other`); o.hidden = sel.value !== 'その他'; if (!o.hidden) o.focus(); }); });
+  if (kind === 'deal') st.syncT = syncTorihiki(p);
 
   // 読み取り
   const fi = $(`#${p}-files`), readBtn = $(`#${p}-read`), drop = $(`#${p}-drop`);
@@ -405,6 +423,7 @@ function bindForm(kind, p, rec, opt){
       const r = await api('extract', { kind, files: payload, text });
       st.fileIds = st.fileIds.concat(r.fileIds || []);
       applyRead(kind, p, r);
+      if (st.syncT) st.syncT();
       toast('読み取りました。赤枠の項目を確認してください');
     } catch (e) { toast(e.message, 6000); }
     busy(readBtn, false);
