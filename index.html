@@ -130,6 +130,9 @@ details.more .grid{margin-top:12px}
 .xhead .score{display:flex;gap:8px;align-items:center}
 .xsec{display:grid;gap:8px;margin-bottom:22px}
 @media (max-width:560px){.xpair{grid-template-columns:1fr}}
+.dupbox{background:var(--warn-bg);color:var(--warn-fg);border:1px solid #e8c77a;border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:13px}
+.dupbox ul{margin:6px 0 0;padding-left:18px}
+.dupbox a{color:inherit;font-weight:700;cursor:pointer}
 .ranknote{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 pre.msg{white-space:pre-wrap;font-family:var(--font-b);font-size:13px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0 0 8px;min-height:80px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -272,7 +275,7 @@ function renderList(){
     $('#rows').innerHTML = list.length ? list.map(r => k === 'deal' ? `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
-        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
+        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
           <span class="m">${esc([r.shubetsu, '担当 ' + userName(r.owner), r.shoryu, '回答' + (S.respCount[r.id] || 0) + '件'].filter(Boolean).join('・'))}</span></span>
         <span class="price">${yen(r.price)}</span></button>` : `
       <button class="item" data-id="${esc(r.id)}">
@@ -611,10 +614,12 @@ function drawDetail(){
   $('#app').innerHTML = `<button class="back" id="back">← ${kind === 'buyer' ? '取引先' : '案件一覧'}</button>
     <h1>${kind !== 'buyer' ? `<span class="rank ${r.rank || 'none'}" style="display:inline-grid;width:30px;height:30px;font-size:15px;vertical-align:3px;margin-right:8px">${esc(r.rank || '－')}</span>` : ''}${esc(title)}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}</h1>
     <p class="sub">${esc(sub.filter(Boolean).join('・'))}</p>
+    ${kind === 'deal' && (d.dups || []).length ? `<div class="dupbox"><b>重複あり</b>：社内の別の営業が、地番・住所が同じ物件を登録しています。<ul>${d.dups.map(x => `<li>担当 ${esc(x.owner)}・商流 ${esc(x.shoryu)}・価格 ${esc(x.price ? yen(x.price) : '未入力')}・登録 ${esc(x.created)}${x.id ? ` <a data-dup="${esc(x.id)}">開く</a>` : ''}</li>`).join('')}</ul></div>` : ''}
     ${Object.keys(tabs).length > 1 ? `<div class="dtabs" role="tablist">${Object.entries(tabs).map(([k, t]) => `<button role="tab" data-dt="${k}" aria-selected="${S.dtab === k}">${t}</button>`).join('')}</div>` : ''}
     <div id="dbody"></div>`;
   $('#back').onclick = () => go(kind === 'buyer' ? 'buyers' : 'list');
   document.querySelectorAll('[data-dt]').forEach(b => b.onclick = () => { S.dtab = b.dataset.dt; drawDetail(); });
+  document.querySelectorAll('[data-dup]').forEach(a => a.onclick = () => go('detail', { dkind: 'deal', did: a.dataset.dup, dtab: 'gaiyo' }));
   PASTE_TARGET = null;
   ({ gaiyo: tabGaiyo, info: tabInfo, cands: tabCands, msgs: tabMsgs, resp: tabResp, hist: tabHist })[S.dtab]();
 }
@@ -661,6 +666,16 @@ function tabInfo(){
   if (xbtn) bindRunX(kind, d.rec.id);
 }
 
+// 他の営業の取引先・買ニーズで、この物件に合うもの（社内マッチ）。非公開のものは概要だけ
+function xcHtml(d){
+  const xs = d.xcands || []; if (!xs.length) return '';
+  return `<h2 style="margin-top:18px">他の営業の取引先・買ニーズ（${xs.length}件）</h2><p class="sub">社内の別の営業が持っている先です。非公開のものは、担当者に連絡してから「公開を依頼」してください。</p>
+    <div class="cands">${xs.map(x => `<div class="cand" style="grid-template-columns:1fr auto"><div style="min-width:0">${x.see ? `<a data-xopen="${x.kind}:${esc(x.tid)}">${esc(x.name)}</a>` : `<b>${x.kind === 'buyer' ? '取引先' : '買ニーズ'}（非公開）</b>`}<span class="chip">担当 ${esc(x.owner)}</span>
+      <div class="why">${esc(x.sum)}</div><div class="why">${esc(x.reason || '')}</div>
+      ${x.see ? '' : x.state === '依頼中' ? '<span class="chip">公開を依頼中</span>' : x.state === '見送り' ? '<span class="chip">今回は見送り</span>' : x.canReq ? `<button class="btn ghost sm" data-xreq="${esc(x.id)}" style="margin-top:6px">公開を依頼</button>` : ''}
+      ${x.mobile ? `<div class="why">担当 ${esc(x.owner)}（${esc(x.mobile)}）</div>` : ''}</div>
+      <div class="score">適合度 ${x.score}<div class="bar"><i style="width:${x.score}%"></i></div></div></div>`).join('')}</div>`;
+}
 function tabCands(){
   const d = S.cur, r = d.rec, m = d.match;
   const answered = {}; (d.responses || []).slice().reverse().forEach(x => { answered[x.buyerId] = x.result; });
@@ -672,12 +687,15 @@ function tabCands(){
       <div class="cands">${m.candidates.length ? m.candidates.map((c, i) => `<div class="cand"><span class="n">${i + 1}</span>
         <div style="min-width:0"><a data-buyer="${esc(c.id)}">${esc(c.name)}</a>${answered[c.id] ? `<span class="chip">${esc(answered[c.id])}</span>` : ''}<div class="why">${esc(c.reason)}</div></div>
         <div class="score">適合度 ${c.score}<div class="bar"><i style="width:${c.score}%"></i></div>${answered[c.id] ? '' : `<button class="btn ghost sm" data-intro="${esc(c.id)}">紹介した</button>`}</div></div>`).join('') : '<div class="empty">合いそうな取引先は見つかりませんでした。</div>'}</div>
+      ${xcHtml(d)}
       ${m.needs.length ? `<h2 style="margin-top:18px">条件が合いそうな買ニーズ</h2><div class="cands">${m.needs.map(n => `<div class="cand" style="grid-template-columns:1fr"><div><a data-need="${esc(n.id)}">${esc(n.name)}</a><div class="why">${esc(n.reason)}</div></div></div>`).join('')}</div>` : ''}`
-    : '<div class="empty">まだ選定していません。「AIで紹介先を選ぶ」を押してください（30秒ほどかかります）。</div>'}`;
+    : '<div class="empty">まだ選定していません。「AIで紹介先を選ぶ」を押してください（30秒ほどかかります）。</div>' + xcHtml(d)}`;
   $('#runm').onclick = async e => { const b = e.currentTarget; busy(b, true, '選定中…'); try { d.match = await api('match', { id: r.id }); tabCands(); } catch (err) { toast(err.message, 6000); busy(b, false); } };
   // 新しく登録した案件は、開いたらすぐAIで紹介先を選ぶ
   if (S.autoMatch === r.id && !m) { S.autoMatch = ''; toast('登録しました。AIが紹介先の候補を選んでいます（30秒ほど）'); $('#runm').click(); xBg('deal', r.id); }
   bindRunX('deal', r.id);
+  document.querySelectorAll('[data-xreq]').forEach(b => b.onclick = async () => { busy(b, true, '送信中…'); try { await api('xRequest', { id: b.dataset.xreq, side: 't' }); toast('公開を依頼しました。担当者か管理者が承認すると見られるようになります'); const g = await api('getRecord', { kind: 'deal', id: r.id }); d.xcands = g.xcands; tabCands(); } catch (e) { toast(e.message, 6000); busy(b, false); } });
+  document.querySelectorAll('[data-xopen]').forEach(a => { const [k, id] = a.dataset.xopen.split(':'); a.onclick = () => go('detail', { dkind: k, did: id, dtab: 'info' }); });
   const sr = $('#setr'); if (sr) sr.onclick = async () => { try { const x = await api('setRank', { id: r.id, rank: m.rank }); d.rec = x.rec; await refresh(); drawDetail(); toast('ランクを ' + m.rank + ' にしました'); } catch (err) { toast(err.message, 6000); } };
   document.querySelectorAll('[data-intro]').forEach(b => b.onclick = async () => { busy(b, true, '記録中…'); try { const x = await api('addResponse', { dealId: r.id, buyerId: b.dataset.intro, result: S.results[0] }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabCands(); toast('紹介済みとして記録しました'); } catch (err) { toast(err.message, 6000); busy(b, false); } });
   document.querySelectorAll('[data-buyer]').forEach(a => a.onclick = () => go('detail', { dkind: 'buyer', did: a.dataset.buyer, dtab: 'info' }));
