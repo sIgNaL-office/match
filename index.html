@@ -132,6 +132,10 @@ details.more .grid{margin-top:12px}
 @media (max-width:560px){.xpair{grid-template-columns:1fr}}
 .dupbox{background:var(--warn-bg);color:var(--warn-fg);border:1px solid #e8c77a;border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:13px}
 .dupbox ul{margin:6px 0 0;padding-left:18px}
+.newbox{background:var(--accent-soft);border:1px solid var(--accent);border-radius:8px;padding:10px 12px;margin:0 0 16px;font-size:13px}
+.newbox ul{margin:0;padding-left:18px;display:grid;gap:4px}
+.newbox a{color:var(--fg);font-weight:700;cursor:pointer}.newbox .m{color:var(--muted);font-size:12px}
+.chip.newc{border-color:var(--s);background:var(--s);color:#fff}
 .dupbox a{color:inherit;font-weight:700;cursor:pointer}
 .ranknote{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 pre.msg{white-space:pre-wrap;font-family:var(--font-b);font-size:13px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0 0 8px;min-height:80px}
@@ -232,6 +236,7 @@ function boot(){
     $('#meName').textContent = S.me.name + (S.me.admin ? '（管理者）' : '');
     const sl = $('#sheetLink'); if (S.sheetUrl) { sl.href = S.sheetUrl; sl.hidden = false; }
     xBadge();
+    markNew();
     go(S.view === 'detail' ? 'list' : S.view);
   }).catch(e => { if (!/ログイン|登録されていません/.test(e.message)) $('#app').innerHTML = `<div class="err">${esc(e.message)}</div><button class="btn" onclick="boot()">もう一度読み込む</button>`; });
 }
@@ -246,11 +251,32 @@ function go(view, opt){
 }
 
 /* ===== 一覧 ===== */
+/* ===== 新着の案件（ほかの人が「公開する」で登録したもの。前回アプリを開いた後の分） ===== */
+function markNew(){
+  if (S.newIds) return; // 開いている間は同じ表示のまま
+  const key = 'sg_seen_' + S.me.email;
+  let last = ls.get(key);
+  if (!last) { const d = new Date(Date.now() - 3 * 864e5); last = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0') + ' 00:00'; } // 初回は直近3日分
+  const fresh = r => r.owner !== S.me.email && r.pub !== S.pubOpts[1] && String(r.created || '') > last;
+  S.newIds = {};
+  S.deals.concat(S.needs).filter(fresh).forEach(r => { S.newIds[r.id] = 1; });
+  const all = S.deals.concat(S.needs).map(r => String(r.created || '')).sort();
+  if (all.length) ls.set(key, all[all.length - 1]);
+}
+const isNew = r => !!(S.newIds && S.newIds[r.id]);
+function newBanner(){
+  const d = S.deals.filter(isNew), n = S.needs.filter(isNew);
+  if (!d.length && !n.length || S.newClosed) return '';
+  const item = (r, k) => `<li><a data-new="${k}:${esc(r.id)}">${esc(k === 'deal' ? (r.title || '（物件名 要確認）') : (r.client || '（顧客名 要確認）'))}</a> <span class="m">${esc([k === 'deal' ? yen(r.price) : r.budget && '予算 ' + r.budget + '万円', '担当 ' + userName(r.owner), String(r.created).slice(5, 16)].filter(Boolean).join('・'))}</span></li>`;
+  return `<div class="newbox"><div class="xhead"><b>新着の案件（${d.length + n.length}件）</b><button class="btn ghost sm" id="newx">閉じる</button></div>
+    <p class="sub" style="margin:2px 0 6px">前回アプリを開いてから、ほかの営業が「公開する」で登録した案件です。</p>
+    <ul>${d.map(r => item(r, 'deal')).join('')}${n.map(r => item(r, 'need')).join('')}</ul></div>`;
+}
 function renderList(){
   const k = S.listKind;
   const rows = k === 'deal' ? S.deals : S.needs;
   const statuses = specs(k).find(s => s.k === 'status').o;
-  $('#app').innerHTML = `<h1>案件一覧</h1>
+  $('#app').innerHTML = newBanner() + `<h1>案件一覧</h1>
     <p class="sub">ランクはS〜Dの優先度です。「社内非公開」は担当者と管理者にだけ表示されます。</p>
     <div class="subtabs" role="tablist">
       <button role="tab" data-lk="deal" aria-selected="${k==='deal'}">売り情報（${S.deals.length}）</button>
@@ -263,6 +289,8 @@ function renderList(){
     </div>
     <div class="list" id="rows"></div>`;
   document.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => { S.listKind = b.dataset.lk; renderList(); });
+  const nx = $('#newx'); if (nx) nx.onclick = () => { S.newClosed = true; renderList(); };
+  document.querySelectorAll('[data-new]').forEach(a => a.onclick = () => { const [kk, id] = a.dataset.new.split(':'); go('detail', { dkind: kk, did: id, dtab: kk === 'deal' ? 'gaiyo' : 'info' }); });
   const draw = () => {
     const q = $('#q').value.trim(), fo = $('#fo').value, fs = $('#fs').value;
     const list = rows.filter(r => (!fo || r.owner === fo) && (!fs || r.status === fs) && (!q || JSON.stringify([r.title, r.addr, r.client, r.area, r.id]).indexOf(q) >= 0));
@@ -275,12 +303,12 @@ function renderList(){
     $('#rows').innerHTML = list.length ? list.map(r => k === 'deal' ? `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
-        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
+        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
           <span class="m">${esc([r.shubetsu, '担当 ' + userName(r.owner), r.shoryu, '回答' + (S.respCount[r.id] || 0) + '件'].filter(Boolean).join('・'))}</span></span>
         <span class="price">${yen(r.price)}</span></button>` : `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
-        <span style="min-width:0"><span class="t">${esc(r.client || '（顧客名 要確認）')}</span>${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${r.status && r.status !== '探索中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('need', r) ? '<span class="chip need">要確認あり</span>' : ''}
+        <span style="min-width:0"><span class="t">${esc(r.client || '（顧客名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${r.status && r.status !== '探索中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('need', r) ? '<span class="chip need">要確認あり</span>' : ''}
           <span class="m">${esc([r.types, r.area, '担当 ' + userName(r.owner)].filter(Boolean).join('・'))}</span></span>
         <span class="price">${esc(r.budget ? r.budget + '万円' : '予算要確認')}</span></button>`).join('')
       : `<div class="empty">${rows.length ? '条件に合う案件はありません。' : (k === 'deal' ? 'まだ売り情報がありません。上の「登録」から、販売図面などの資料を入れて最初の案件を登録してください。' : 'まだ買ニーズがありません。「登録 → 買ニーズ」から、買主の文面やスクショで登録できます。')}</div>`;
@@ -742,13 +770,21 @@ function tabResp(){
   const opts = cands.map(c => ({ id: c.id, name: c.name })).concat(S.buyers.filter(b => !cands.some(c => c.id === b.id)).map(b => ({ id: b.id, name: b.co })));
   $('#dbody').innerHTML = `<p class="sub">紹介先からの回答を記録します。ここに溜まった買付金額や見送り理由が、次からの紹介先の選定に使われます。</p>
     <div class="panel"><div class="grid">
-      <div class="f"><label for="r-b">紹介先</label><select id="r-b"><option value="">選択してください</option>${opts.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('')}</select></div>
+      <div class="f"><label for="r-q">紹介先</label><input id="r-q" type="search" placeholder="会社名で探す（一部だけでも可）" autocomplete="off" style="margin-bottom:6px"><select id="r-b"></select></div>
       <div class="f"><label for="r-r">回答</label><select id="r-r">${S.results.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
       <div class="f"><label for="r-a">買付・仕入金額</label><input id="r-a" placeholder="例：8,500万円"></div>
       <div class="f"><label for="r-w">見送り理由・メモ</label><input id="r-w" placeholder="例：容積が足りない、価格が合わない"></div>
     </div><div style="margin-top:12px"><button class="btn sm" id="r-add">回答を記録</button></div></div>
     <div class="tbl-wrap" style="margin-top:12px"><table class="log"><tr><th>日時</th><th>紹介先</th><th>回答</th><th>金額</th><th>理由・メモ</th><th>記録者</th></tr>
     ${d.responses.length ? d.responses.map(x => `<tr><td>${esc(x.at)}</td><td>${esc(x.buyerName)}</td><td>${esc(x.result)}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}</td><td>${esc(x.by)}</td></tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">まだ回答はありません</td></tr>'}</table></div>`;
+  // 会社名の一部で候補を絞る（株式会社・(株)・全角半角・大文字小文字の違いは無視）
+  const nz = t => String(t || '').normalize('NFKC').replace(/株式会社|\(株\)|有限会社|\s/g, '').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).toLowerCase();
+  const fill = () => {
+    const q = nz($('#r-q').value), hit = q ? opts.filter(o => nz(o.name).indexOf(q) >= 0) : opts;
+    $('#r-b').innerHTML = `<option value="">${q ? (hit.length ? hit.length + '件見つかりました。選んでください' : '見つかりません') : '選択してください'}</option>` + hit.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('');
+    if (q && hit.length === 1) $('#r-b').value = hit[0].id;
+  };
+  $('#r-q').oninput = fill; fill();
   $('#r-add').onclick = async e => {
     if (!$('#r-b').value) { toast('紹介先を選んでください'); return; }
     const b = e.currentTarget; busy(b, true, '記録中…');
