@@ -290,17 +290,24 @@ function renderList(){
   draw();
 }
 
+// 取引先を「得意な案件」で絞る（立退き・底地などはメモや条件の書きぶりからも探す。種別は得意分野のチェックで）
+const BUYER_TAGS = [
+  ['立退き', /立.?退/], ['底地・借地', /底地|借地/], ['共有持分', /共有持分|持分/], ['再建築不可', /再建築不可|無接道/],
+  ['土地', /土地/, 1], ['古家付土地', /古家/, 1], ['収益一棟', /収益/, 1], ['ビル', /ビル/, 1], ['区分', /区分/, 1], ['三為', /三為/]
+];
 function renderBuyers(){
   const adm = S.me.admin;
   const regKey = b => b.regBy || S.me.email;
   const regs = adm ? [...new Set(S.buyers.map(regKey))] : [];
   $('#app').innerHTML = `<h1>取引先</h1><p class="sub">仕入会社の条件と、紹介・回答の実績です。条件を変更すると、前の内容は履歴として残ります。${adm ? '管理者なので、全員が登録した取引先が表示されています。' : 'ここには、あなたが登録した取引先だけが表示されます。'}</p>
-    <div class="filters"><input id="q" type="search" placeholder="会社名・エリア・得意分野で探す" aria-label="検索">${adm ? `<select id="fr" aria-label="登録した人"><option value="">全員の取引先</option>${regs.map(e => `<option value="${esc(e)}">${esc(userName(e))}の取引先</option>`).join('')}</select>` : ''}<button class="btn sm" id="addB">取引先を登録</button></div>
+    <div class="filters"><input id="q" type="search" placeholder="会社名・エリア・得意分野・メモで探す" aria-label="検索"><select id="fg" aria-label="得意な案件"><option value="">得意な案件：すべて</option>${BUYER_TAGS.map(t => `<option${S.bTag === t[0] ? ' selected' : ''}>${t[0]}</option>`).join('')}</select>${adm ? `<select id="fr" aria-label="登録した人"><option value="">全員の取引先</option>${regs.map(e => `<option value="${esc(e)}">${esc(userName(e))}の取引先</option>`).join('')}</select>` : ''}<button class="btn sm" id="addB">取引先を登録</button></div>
     <div class="list" id="rows"></div>`;
   $('#addB').onclick = () => go('new', { newKind: 'buyer' });
   const draw = () => {
-    const q = $('#q').value.trim(), fr = adm ? $('#fr').value : '';
-    const list = S.buyers.filter(b => (!fr || regKey(b) === fr) && (!q || JSON.stringify([b.co, b.area, b.good, b.style, b.person]).indexOf(q) >= 0));
+    const q = $('#q').value.trim(), fr = adm ? $('#fr').value : '', fg = S.bTag = $('#fg').value;
+    const tag = BUYER_TAGS.find(t => t[0] === fg);
+    const text = b => [b.co, b.area, b.good, b.style, b.person, b.size, b.terms, b.memo].join(' ');
+    const list = S.buyers.filter(b => (!fr || regKey(b) === fr) && (!tag || tag[1].test(tag[2] ? b.good : text(b))) && (!q || text(b).indexOf(q) >= 0));
     $('#rows').innerHTML = list.length ? list.map(b => `<button class="item norank" data-id="${esc(b.id)}">
       <span style="min-width:0"><span class="t">${esc(b.co)}</span>${b.style ? `<span class="chip">${esc(b.style)}</span>` : ''}${missingReq('buyer', b) ? '<span class="chip need">要確認あり</span>' : ''}
       <span class="m">${esc([b.good, b.area, b.size, adm && '登録 ' + userName(regKey(b))].filter(Boolean).join('・'))}</span></span>
@@ -308,7 +315,7 @@ function renderBuyers(){
       : `<div class="empty">${S.buyers.length ? '条件に合う取引先はありません。' : 'まだ取引先がありません。名刺の写真や先方からの文面で登録できます。紹介先の自動選定は、ここに登録した取引先から選びます。'}</div>`;
     document.querySelectorAll('#rows .item').forEach(b => b.onclick = () => go('detail', { dkind: 'buyer', did: b.dataset.id, dtab: 'info' }));
   };
-  $('#q').oninput = draw; if (adm) $('#fr').oninput = draw; draw();
+  $('#q').oninput = draw; $('#fg').oninput = draw; if (adm) $('#fr').oninput = draw; draw();
 }
 
 /* ===== 入力フォーム（登録・編集で共通） ===== */
