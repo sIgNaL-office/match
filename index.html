@@ -146,6 +146,8 @@ pre.msg{white-space:pre-wrap;font-family:var(--font-b);font-size:13px;background
 .log{width:100%;border-collapse:collapse;font-size:13px}
 .log th,.log td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
 .log th{color:var(--muted);font-weight:500;font-size:12px;white-space:nowrap}
+.rhist{margin-top:4px;font-size:11.5px;color:var(--muted)}.rhist summary{cursor:pointer}
+.redit select,.redit input,.redit textarea{width:100%;min-width:110px;font:inherit;font-size:13px}
 .files{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;margin-top:8px}
 .files a{color:var(--accent)}
 .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 18px;border-radius:999px;font-size:13px;z-index:20;max-width:92vw;text-align:center}
@@ -758,11 +760,13 @@ function bindCopy(){
   });
 }
 
+// 回答記録の更新履歴（いつ紹介して、いつ何が変わったか）
+const histHtml = x => x.hist ? `<details class="rhist"><summary>履歴</summary>${String(x.hist).split('\n').map(l => `<div>${esc(l)}</div>`).join('')}</details>` : '';
 function tabResp(){
   const d = S.cur, kind = S.dkind;
   if (kind === 'buyer') {
-    $('#dbody').innerHTML = `<div class="tbl-wrap"><table class="log"><tr><th>日時</th><th>案件</th><th>回答</th><th>金額</th><th>理由・メモ</th><th>記録者</th></tr>
-      ${d.responses.length ? d.responses.map(x => `<tr><td>${esc(x.at)}</td><td>${esc(x.dealTitle)}</td><td>${esc(x.result)}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}</td><td>${esc(x.by)}</td></tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">まだ紹介の記録はありません</td></tr>'}</table></div>`;
+    $('#dbody').innerHTML = `<div class="tbl-wrap"><table class="log"><tr><th>紹介日</th><th>案件</th><th>回答</th><th>回答日</th><th>金額</th><th>理由・メモ</th><th>記録者</th></tr>
+      ${d.responses.length ? d.responses.map(x => `<tr><td>${esc(x.at)}</td><td>${esc(x.dealTitle)}</td><td>${esc(x.result)}</td><td>${esc(x.answerAt || '')}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}${histHtml(x)}</td><td>${esc(x.by)}</td></tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted)">まだ紹介の記録はありません</td></tr>'}</table></div>`;
     return;
   }
   const r = d.rec;
@@ -775,8 +779,13 @@ function tabResp(){
       <div class="f"><label for="r-a">買付・仕入金額</label><input id="r-a" placeholder="例：8,500万円"></div>
       <div class="f"><label for="r-w">見送り理由・メモ</label><input id="r-w" placeholder="例：容積が足りない、価格が合わない"></div>
     </div><div style="margin-top:12px"><button class="btn sm" id="r-add">回答を記録</button></div></div>
-    <div class="tbl-wrap" style="margin-top:12px"><table class="log"><tr><th>日時</th><th>紹介先</th><th>回答</th><th>金額</th><th>理由・メモ</th><th>記録者</th></tr>
-    ${d.responses.length ? d.responses.map(x => `<tr><td>${esc(x.at)}</td><td>${esc(x.buyerName)}</td><td>${esc(x.result)}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}</td><td>${esc(x.by)}</td></tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">まだ回答はありません</td></tr>'}</table></div>`;
+    <div class="tbl-wrap" style="margin-top:12px"><table class="log"><tr><th>紹介日</th><th>紹介先</th><th>回答</th><th>回答日</th><th>金額</th><th>理由・メモ</th><th></th></tr>
+    ${d.responses.length ? d.responses.map(x => S.editResp === x.id ? `<tr class="redit"><td>${esc(x.at)}</td><td>${esc(x.buyerName)}</td>
+        <td><select id="e-r">${S.results.map(o => `<option${o === x.result ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></td><td>${esc(x.answerAt || '')}</td>
+        <td><input id="e-a" value="${esc(x.amount)}" placeholder="例：8,500万円"></td><td><textarea id="e-w" rows="2">${esc(x.reason)}</textarea></td>
+        <td style="white-space:nowrap"><button class="btn sm" id="e-save">保存</button> <button class="btn ghost sm" id="e-cancel">やめる</button></td></tr>`
+      : `<tr><td>${esc(x.at)}</td><td>${esc(x.buyerName)}</td><td>${esc(x.result)}</td><td>${esc(x.answerAt || '')}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}${histHtml(x)}</td>
+        <td>${x.buyerId ? `<button class="btn ghost sm" data-redit="${esc(x.id)}">更新</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted)">まだ回答はありません</td></tr>'}</table></div>`;
   // 会社名の一部で候補を絞る（株式会社・(株)・全角半角・大文字小文字の違いは無視）
   const nz = t => String(t || '').normalize('NFKC').replace(/株式会社|\(株\)|有限会社|\s/g, '').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).toLowerCase();
   const fill = () => {
@@ -788,9 +797,20 @@ function tabResp(){
   $('#r-add').onclick = async e => {
     if (!$('#r-b').value) { toast('紹介先を選んでください'); return; }
     const b = e.currentTarget; busy(b, true, '記録中…');
-    try { const x = await api('addResponse', { dealId: r.id, buyerId: $('#r-b').value, result: $('#r-r').value, amount: $('#r-a').value, reason: $('#r-w').value }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabResp(); toast('記録しました'); }
+    try { const x = await api('addResponse', { dealId: r.id, buyerId: $('#r-b').value, result: $('#r-r').value, amount: $('#r-a').value, reason: $('#r-w').value }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabResp(); toast(x.updated ? 'この取引先の記録がすでにあったので、その記録を更新しました' : '記録しました', 4000); }
     catch (err) { toast(err.message, 6000); busy(b, false); }
   };
+  // 記録済みの回答を更新（回答・金額・理由メモ）
+  document.querySelectorAll('[data-redit]').forEach(b => b.onclick = () => { S.editResp = b.dataset.redit; tabResp(); });
+  const es = $('#e-save');
+  if (es) {
+    $('#e-cancel').onclick = () => { S.editResp = ''; tabResp(); };
+    es.onclick = async () => {
+      busy(es, true, '保存中…');
+      try { const x = await api('updateResponse', { id: S.editResp, result: $('#e-r').value, amount: $('#e-a').value, reason: $('#e-w').value }); d.responses = x.responses; S.editResp = ''; tabResp(); toast('更新しました'); }
+      catch (err) { toast(err.message, 6000); busy(es, false); }
+    };
+  }
 }
 
 function tabHist(){
