@@ -137,6 +137,10 @@ details.more .grid{margin-top:12px}
 .newbox a{color:var(--fg);font-weight:700;cursor:pointer}.newbox .m{color:var(--muted);font-size:12px}
 .chip.newc{border-color:var(--s);background:var(--s);color:#fff}
 .dupbox a{color:inherit;font-weight:700;cursor:pointer}
+.oboard{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:13px}.oboard .m{color:var(--muted);font-size:12px}
+.oboard ul{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}.oboard li.ok{color:var(--green);font-weight:700}.oboard li.ng{color:var(--muted);text-decoration:line-through}
+.oboard.empty-o{color:var(--muted)}.obar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:6px}.obar i{display:block;height:100%;background:var(--green)}
+.ocard select{font:inherit;font-size:13px;padding:4px 6px;border:1px solid var(--accent);border-radius:6px}
 .stbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;font-size:13px}.stbar label{color:var(--muted)}.stbar select{font:inherit;padding:5px 8px;border:1px solid var(--accent);border-radius:6px;background:var(--surface)}.stbar .m{color:var(--muted);font-size:12px}.stbar .rhist{flex-basis:100%;margin:0}
 .ranknote{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px}
 pre.msg{white-space:pre-wrap;font-family:var(--font-b);font-size:13px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0 0 8px;min-height:80px}
@@ -295,7 +299,7 @@ function tobiItem(r){
   return `<button class="item" data-id="${esc(r.id)}">
     <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
     <span style="min-width:0"><span class="t">${esc(r.title || r.addr || '（案件名 要確認）')}</span>${isStale(r) ? '<span class="chip newc">1か月経過</span>' : ''}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}<span class="chip">${esc(r.status || '未接触')}</span>
-      <span class="m">${esc([r.landlord && '所有者 ' + r.landlord, '担当 ' + userName(r.owner), r.lastContact ? '最終接触 ' + r.lastContact : '接触の記録なし', r.nextAt && '次回 ' + r.nextAt].filter(Boolean).join('・'))}</span></span>
+      <span class="m">${esc([ownersSum(r.owners), '担当 ' + userName(r.owner), r.lastContact ? '最終接触 ' + r.lastContact : '接触の記録なし', r.nextAt && '次回 ' + r.nextAt].filter(Boolean).join('・'))}</span></span>
     <span class="price">${r.exitPrice ? '出口 ' + yen(r.exitPrice) : '出口価格 未入力'}</span></button>`;
 }
 function renderList(){
@@ -339,10 +343,10 @@ function renderList(){
           <span class="m">${esc([r.types, r.area, '担当 ' + userName(r.owner)].filter(Boolean).join('・'))}</span></span>
         <span class="price">${esc(r.budget ? r.budget + '万円' : '予算要確認')}</span></button>`).join('')
       : `<div class="empty">${rows.length ? '条件に合う案件はありません。' : (k === 'deal' ? 'まだ売り情報がありません。上の「登録」から、販売図面などの資料を入れて最初の案件を登録してください。' : k === 'tobi' ? 'まだ飛び込みの案件がありません。「登録 → 飛び込み（地上げ）」から登録できます。' : 'まだ買ニーズがありません。「登録 → 買ニーズ」から、買主の文面やスクショで登録できます。')}</div>`;
-    document.querySelectorAll('#rows .item').forEach(b => b.onclick = () => go('detail', { dkind: k, did: b.dataset.id, dtab: k === 'deal' ? 'gaiyo' : k === 'tobi' ? 'log' : 'info' }));
+    document.querySelectorAll('#rows .item').forEach(b => b.onclick = () => go('detail', { dkind: k, did: b.dataset.id, dtab: k === 'deal' ? 'gaiyo' : k === 'tobi' ? 'owners' : 'info' }));
   };
   ['q', 'fo', 'fs', 'fsort'].forEach(id => $('#' + id).oninput = draw);
-  document.querySelectorAll('[data-stale]').forEach(a => a.onclick = () => go('detail', { dkind: 'tobi', did: a.dataset.stale, dtab: 'log' }));
+  document.querySelectorAll('[data-stale]').forEach(a => a.onclick = () => go('detail', { dkind: 'tobi', did: a.dataset.stale, dtab: 'owners' }));
   draw();
 }
 
@@ -491,6 +495,10 @@ function bindForm(kind, p, rec, opt){
       st.fileIds = st.fileIds.concat(r.fileIds || []);
       applyRead(kind, p, r);
       if (st.syncT) st.syncT();
+      if (kind === 'tobi' && !rec && (r.owners || []).length) { // 謄本などから読み取った地権者は、登録と一緒に追加する
+        st.owners = r.owners;
+        $(`#${p}-note`).insertAdjacentHTML('beforeend', `<div class="note"><b>読み取った地権者（${r.owners.length}名）</b>…登録すると地権者として追加されます。<ul style="margin:4px 0 0;padding-left:18px">${r.owners.map(o => `<li>${esc(ownerLine(o))}</li>`).join('')}</ul></div>`);
+      }
       toast('読み取りました。赤枠の項目を確認してください');
     } catch (e) { toast(e.message, 6000); }
     busy(readBtn, false);
@@ -521,7 +529,7 @@ function bindForm(kind, p, rec, opt){
     if (rec) out.id = rec.id;
     busy(btn, true, '保存中…');
     try {
-      const r = await api('saveRecord', { kind, rec: out, fileIds: st.fileIds });
+      const r = await api('saveRecord', { kind, rec: out, fileIds: st.fileIds, owners: rec ? undefined : st.owners });
       st.fileIds = [];
       await refresh();
       toast(rec ? '保存しました' : '登録しました');
@@ -588,7 +596,7 @@ function renderNew(){
   bindForm(k, 'nf', null, { onSaved: rec => {
     if (k === 'deal') go('detail', { dkind: 'deal', did: rec.id, dtab: 'cands', autoMatch: rec.id });
     else if (k === 'need') { xBg('need', rec.id); go('list', { listKind: 'need' }); }
-    else if (k === 'tobi') go('detail', { dkind: 'tobi', did: rec.id, dtab: 'log' });
+    else if (k === 'tobi') go('detail', { dkind: 'tobi', did: rec.id, dtab: 'owners' });
     else { xBg('buyer', rec.id); go('buyers'); }
   }});
 }
@@ -685,6 +693,65 @@ function bindStatus(kind, d){
     } catch (e) { toast(e.message, 6000); q.disabled = false; }
   };
 }
+/* ===== 地権者 ===== */
+const ownerLine = o => [o.name + (/様$|会社|法人/.test(o.name || '') ? '' : '様'), o.right || '権利未入力', o.chiban ? '地番 ' + o.chiban : '地番未入力', o.share ? '持分 ' + o.share : '持分なし', o.status ? 'ステータス：' + o.status : ''].filter(Boolean).join('／');
+// 一覧用の要約（例：地権者3名（契約合意1・条件交渉中1・未接触1））
+function ownersSum(os){
+  if (!os || !os.length) return '地権者 未登録';
+  const c = {}; os.forEach(o => { const s = o.status || '未接触'; c[s] = (c[s] || 0) + 1; });
+  return '地権者' + os.length + '名（' + (S.ownerStatus || []).filter(s => c[s]).map(s => s + c[s]).join('・') + '）';
+}
+const OWNER_DONE = /契約合意|契約済み|決済済み/;
+// 案件を開いたときに、地権者ごとの進み具合を一目で
+function ownersBoard(d){
+  const os = d.owners || [];
+  if (!os.length) return `<div class="oboard empty-o">地権者はまだ登録されていません。「地権者」タブから1人ずつ登録できます。</div>`;
+  const done = os.filter(o => OWNER_DONE.test(o.status)).length;
+  return `<div class="oboard"><div class="xhead"><b>地権者ごとの進み具合</b><span class="m">合意以上 ${done}/${os.length}名</span></div>
+    <div class="obar"><i style="width:${Math.round(done / os.length * 100)}%"></i></div>
+    <ul>${os.map(o => `<li class="${OWNER_DONE.test(o.status) ? 'ok' : /拒否/.test(o.status) ? 'ng' : ''}">${esc(ownerLine(o))}</li>`).join('')}</ul></div>`;
+}
+function tabOwners(){
+  const d = S.cur, r = d.rec, os = d.owners || [], ed = d.canEdit;
+  const sel = (id, opts, v) => `<select id="${id}"><option value="">選択してください</option>${opts.map(x => `<option${x === v ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+  const form = o => `<div class="grid">
+      <div class="f"><label for="o-n">氏名・名称</label><input id="o-n" value="${esc(o.name || '')}" placeholder="例：山田太郎"></div>
+      <div class="f"><label for="o-r">権利</label>${sel('o-r', S.ownerRights || [], o.right)}</div>
+      <div class="f"><label for="o-c">地番・家屋番号</label><input id="o-c" value="${esc(o.chiban || '')}" placeholder="例：17-1、17-2"></div>
+      <div class="f"><label for="o-sh">持分</label><input id="o-sh" value="${esc(o.share || '')}" placeholder="例：2/3（なければ空欄）"></div>
+      <div class="f"><label for="o-st">ステータス</label>${sel('o-st', S.ownerStatus || [], o.status || (S.ownerStatus || [])[0])}</div>
+      <div class="f"><label for="o-ct">連絡先・住所</label><input id="o-ct" value="${esc(o.contact || '')}" placeholder="例：登記上の住所、電話番号"></div>
+      <div class="f full"><label for="o-m">メモ</label><textarea id="o-m" rows="2" placeholder="例：長男が窓口。売却には前向きだが価格次第">${esc(o.memo || '')}</textarea></div>
+    </div><div class="row" style="margin-top:10px"><button class="btn sm" id="o-save">${o.id ? '変更を保存' : '地権者を追加'}</button>${o.id ? '<button class="btn ghost sm" id="o-cancel">やめる</button>' : ''}</div>`;
+  const editing = os.find(o => o.id === S.editOwner);
+  $('#dbody').innerHTML = `<div class="cands">${os.length ? os.map(o => S.editOwner === o.id ? `<div class="panel">${form(o)}</div>` : `<div class="cand ocard" style="grid-template-columns:1fr auto">
+      <div style="min-width:0"><b>${esc(o.name)}</b><span class="chip">${esc(o.right || '権利未入力')}</span>
+        <div class="why">地番 ${esc(o.chiban || '未入力')}／持分 ${esc(o.share || 'なし')}${o.contact ? '／' + esc(o.contact) : ''}</div>
+        ${o.memo ? `<div class="why">${esc(o.memo)}</div>` : ''}
+        ${o.statusHist ? `<details class="rhist"><summary>ステータスの履歴</summary>${String(o.statusHist).split('\n').reverse().map(l => `<div>${esc(l)}</div>`).join('')}</details>` : ''}</div>
+      <div style="display:grid;gap:6px;justify-items:end">${ed ? `<select data-ost="${esc(o.id)}">${(S.ownerStatus || []).map(x => `<option${x === o.status ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select>` : `<b>${esc(o.status || '未接触')}</b>`}
+        <span class="m">${o.statusAt ? '更新 ' + esc(o.statusAt) : ''}</span>
+        ${ed ? `<div class="row" style="gap:6px"><button class="btn ghost sm" data-olog="${esc(o.id)}">回答を記録</button><button class="btn ghost sm" data-oedit="${esc(o.id)}">編集</button><button class="btn ghost sm" data-odel="${esc(o.id)}">削除</button></div>` : ''}</div></div>`).join('')
+    : '<div class="empty">地権者はまだ登録されていません。共有者・借地権者なども1人ずつ登録すると、人ごとに進み具合を管理できます。</div>'}</div>
+    ${ed && !editing ? `<div class="panel" style="margin-top:12px"><h2>地権者を追加</h2>${form({})}</div>` : ''}`;
+  if (!ed) return;
+  const save = async (id, extra) => {
+    const owner = Object.assign({ id: id || '' }, extra || { name: $('#o-n').value, right: $('#o-r').value, chiban: $('#o-c').value, share: $('#o-sh').value, status: $('#o-st').value, contact: $('#o-ct').value, memo: $('#o-m').value });
+    const x = await api('saveOwner', { tobiId: r.id, owner: owner });
+    d.owners = x.owners; S.editOwner = ''; await refresh(); drawDetail();
+  };
+  const sv = $('#o-save');
+  if (sv) sv.onclick = async () => { busy(sv, true, '保存中…'); try { await save(editing ? editing.id : ''); toast(editing ? '変更しました' : '地権者を追加しました'); } catch (e) { toast(e.message, 6000); busy(sv, false); } };
+  const cc = $('#o-cancel'); if (cc) cc.onclick = () => { S.editOwner = ''; tabOwners(); };
+  document.querySelectorAll('[data-oedit]').forEach(b => b.onclick = () => { S.editOwner = b.dataset.oedit; tabOwners(); });
+  document.querySelectorAll('[data-olog]').forEach(b => b.onclick = () => { S.logOwner = b.dataset.olog; S.dtab = 'log'; drawDetail(); });
+  document.querySelectorAll('[data-ost]').forEach(q => q.onchange = async () => { q.disabled = true; try { await save(q.dataset.ost, { status: q.value }); toast('「' + q.value + '」に変更しました'); } catch (e) { toast(e.message, 6000); q.disabled = false; } });
+  document.querySelectorAll('[data-odel]').forEach(b => b.onclick = async () => {
+    if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'もう一度押すと削除'; return; }
+    busy(b, true, '削除中…');
+    try { const x = await api('saveOwner', { tobiId: r.id, owner: { id: b.dataset.odel }, remove: true }); d.owners = x.owners; await refresh(); drawDetail(); toast('削除しました'); } catch (e) { toast(e.message, 6000); busy(b, false); }
+  });
+}
 // 飛び込み：接触の記録（訪問・面談・電話など）
 function tabLog(){
   const d = S.cur, r = d.rec, cs = d.contacts || [];
@@ -693,33 +760,40 @@ function tabLog(){
       <div class="f"><label for="c-d">接触した日</label><input id="c-d" type="date" value="${ymd}"></div>
       <div class="f"><label for="c-t">方法</label><select id="c-t">${(S.contactTypes || []).map(t => `<option>${esc(t)}</option>`).join('')}</select></div>
       <div class="f full"><label for="c-n">内容</label><textarea id="c-n" rows="3" placeholder="例：本人と面談。売却は相続が落ち着いてから検討。次回は12月に再訪。"></textarea></div>
-      <div class="f"><label for="c-s">進捗も変える（任意）</label><select id="c-s"><option value="">変えない（${esc(r.status || '未接触')}）</option>${specs('tobi').find(s => s.k === 'status').o.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
+      <div class="f"><label for="c-o">相手の地権者</label><select id="c-o"><option value="">案件全体（特定の地権者ではない）</option>${(d.owners || []).map(o => `<option value="${esc(o.id)}">${esc(o.name)}（${esc(o.right || '権利未入力')}）</option>`).join('')}</select></div>
+      <div class="f"><label for="c-os">その地権者の回答・ステータス</label><select id="c-os" disabled><option value="">変えない</option>${(S.ownerStatus || []).map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
+      <div class="f"><label for="c-s">案件全体の進捗も変える（任意）</label><select id="c-s"><option value="">変えない（${esc(r.status || '未接触')}）</option>${specs('tobi').find(s => s.k === 'status').o.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
     </div><div style="margin-top:12px"><button class="btn sm" id="c-add">記録する</button></div></div>` : ''}
-    <div class="tbl-wrap" style="margin-top:12px"><table class="log"><tr><th>接触日</th><th>方法</th><th>内容</th><th>記録者</th></tr>
-    ${cs.length ? cs.map(c => `<tr><td style="white-space:nowrap">${esc(c.date)}</td><td>${esc(c.type)}</td><td style="white-space:pre-wrap">${esc(c.note)}</td><td>${esc(c.by)}</td></tr>`).join('') : '<tr><td colspan="4" style="color:var(--muted)">まだ接触の記録はありません。訪問したら記録しておくと、1か月たったときにお知らせします。</td></tr>'}</table></div>`;
+    <div class="tbl-wrap" style="margin-top:12px"><table class="log"><tr><th>接触日</th><th>相手</th><th>方法</th><th>内容・回答</th><th>記録者</th></tr>
+    ${cs.length ? cs.map(c => `<tr><td style="white-space:nowrap">${esc(c.date)}</td><td>${esc(c.ownerName || '全体')}</td><td>${esc(c.type)}</td><td style="white-space:pre-wrap">${c.ownerStatus ? `<span class="chip" style="margin:0 6px 0 0">${esc(c.ownerStatus)}</span>` : ''}${esc(c.note)}</td><td>${esc(c.by)}</td></tr>`).join('') : '<tr><td colspan="5" style="color:var(--muted)">まだ接触の記録はありません。訪問したら記録しておくと、1か月たったときにお知らせします。</td></tr>'}</table></div>`;
   const b = $('#c-add'); if (!b) return;
+  if (S.logOwner) { $('#c-o').value = S.logOwner; S.logOwner = ''; }
+  const co = $('#c-o'), cos = $('#c-os');
+  const syncO = () => { cos.disabled = !co.value; const o = (d.owners || []).find(x => x.id === co.value); cos.options[0].text = o ? '変えない（' + (o.status || '未接触') + '）' : '変えない'; if (!co.value) cos.value = ''; };
+  co.onchange = syncO; syncO();
   b.onclick = async () => {
     busy(b, true, '記録中…');
     try {
-      const x = await api('addContact', { id: r.id, date: $('#c-d').value, type: $('#c-t').value, note: $('#c-n').value, status: $('#c-s').value });
-      d.rec = x.rec; d.contacts = x.contacts; await refresh(); drawDetail(); toast('記録しました');
+      const x = await api('addContact', { id: r.id, date: $('#c-d').value, type: $('#c-t').value, note: $('#c-n').value, status: $('#c-s').value, ownerId: co.value, ownerStatus: cos.value });
+      d.rec = x.rec; d.contacts = x.contacts; d.owners = x.owners; await refresh(); drawDetail(); toast('記録しました');
     } catch (e) { toast(e.message, 6000); busy(b, false); }
   };
 }
 function drawDetail(){
   const kind = S.dkind, d = S.cur, r = d.rec;
   const tabs = kind === 'deal' ? { gaiyo: '物件概要書', info: '案件情報', cands: '紹介先の候補', msgs: '紹介文', resp: '回答の記録' }
-             : kind === 'buyer' ? { info: '取引先情報', hist: '変更履歴', resp: '紹介・回答の実績' } : kind === 'tobi' ? { log: '接触の記録', info: '案件情報' } : { info: '買ニーズ情報' };
+             : kind === 'buyer' ? { info: '取引先情報', hist: '変更履歴', resp: '紹介・回答の実績' } : kind === 'tobi' ? { owners: '地権者', log: '接触・回答の記録', info: '案件情報' } : { info: '買ニーズ情報' };
   if (!tabs[S.dtab]) S.dtab = Object.keys(tabs)[0];
   const title = kind === 'deal' || kind === 'tobi' ? (r.title || r.addr || '（物件名 要確認）') : kind === 'need' ? (r.client || '（顧客名 要確認）') : r.co;
   const sub = kind === 'deal' ? [r.id, '担当 ' + userName(r.owner), r.shoryu, r.source && '情報元 ' + r.source, yen(r.price), r.status]
             : kind === 'need' ? [r.id, '担当 ' + userName(r.owner), r.shoryu, r.budget && '予算 ' + r.budget + '万円', r.status]
-            : kind === 'tobi' ? [r.id, '担当 ' + userName(r.owner), r.landlord && '所有者 ' + r.landlord, r.exitPrice && '予想出口 ' + yen(r.exitPrice), r.lastContact ? '最終接触 ' + r.lastContact : '接触の記録なし']
+            : kind === 'tobi' ? [r.id, '担当 ' + userName(r.owner), r.exitPrice && '予想出口 ' + yen(r.exitPrice), r.lastContact ? '最終接触 ' + r.lastContact : '接触の記録なし']
             : [r.id, r.style, r.person, r.contact];
   $('#app').innerHTML = `<button class="back" id="back">← ${kind === 'buyer' ? '取引先' : '案件一覧'}</button>
     <h1>${kind !== 'buyer' ? `<span class="rank ${r.rank || 'none'}" style="display:inline-grid;width:30px;height:30px;font-size:15px;vertical-align:3px;margin-right:8px">${esc(r.rank || '－')}</span>` : ''}${esc(title)}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}</h1>
     <p class="sub">${esc(sub.filter(Boolean).join('・'))}</p>
     ${kind !== 'buyer' ? statusHtml(kind, d) : ''}
+    ${kind === 'tobi' ? ownersBoard(d) : ''}
     ${kind === 'tobi' && isStale(r) ? `<div class="dupbox"><b>前回の接触から1か月が経過しました</b>（${r.lastContact ? '最終接触 ' + esc(r.lastContact) + '・' + daysSince(r.lastContact) + '日前' : 'まだ接触の記録がありません'}）。次の訪問や連絡を予定しましょう。</div>` : ''}
     ${kind === 'deal' && (d.dups || []).length ? `<div class="dupbox"><b>重複あり</b>：社内の別の営業が、地番・住所が同じ物件を登録しています。<ul>${d.dups.map(x => `<li>担当 ${esc(x.owner)}・商流 ${esc(x.shoryu)}・価格 ${esc(x.price ? yen(x.price) : '未入力')}・登録 ${esc(x.created)}${x.id ? ` <a data-dup="${esc(x.id)}">開く</a>` : ''}</li>`).join('')}</ul></div>` : ''}
     ${Object.keys(tabs).length > 1 ? `<div class="dtabs" role="tablist">${Object.entries(tabs).map(([k, t]) => `<button role="tab" data-dt="${k}" aria-selected="${S.dtab === k}">${t}</button>`).join('')}</div>` : ''}
@@ -729,7 +803,7 @@ function drawDetail(){
   document.querySelectorAll('[data-dup]').forEach(a => a.onclick = () => go('detail', { dkind: 'deal', did: a.dataset.dup, dtab: 'gaiyo' }));
   bindStatus(kind, d);
   PASTE_TARGET = null;
-  ({ gaiyo: tabGaiyo, info: tabInfo, cands: tabCands, msgs: tabMsgs, resp: tabResp, hist: tabHist, log: tabLog })[S.dtab]();
+  ({ gaiyo: tabGaiyo, info: tabInfo, cands: tabCands, msgs: tabMsgs, resp: tabResp, hist: tabHist, log: tabLog, owners: tabOwners })[S.dtab]();
 }
 const filesHtml = files => files && files.length ? `<div class="files">資料：${files.map(f => `<a href="#" data-fid="${esc(f.id)}">${esc(f.name)}</a>`).join('')}</div>` : '';
 // 資料をアプリ経由でダウンロード（ドライブの共有リクエストなし）
