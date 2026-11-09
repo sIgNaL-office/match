@@ -79,6 +79,7 @@ h2{font-family:var(--font-d);font-size:16px;margin:0 0 10px}
 .f>label,.f>.lbl{display:block;font-size:12px;color:var(--muted);margin-bottom:3px;font-weight:500}
 .f.full{grid-column:1/-1}
 .f .other{margin-top:6px}
+[hidden]{display:none!important}
 .checks{display:flex;flex-wrap:wrap;gap:6px 14px}
 .checks label,.inline{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--fg);font-weight:400}
 .checks input,.inline input{width:auto}
@@ -213,6 +214,9 @@ function api(action, args){
 }
 function busy(btn, on, label){ if (!btn) return; if (on){ btn.dataset.l = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span>' + (label || '処理中…'); } else { btn.disabled = false; btn.innerHTML = btn.dataset.l || btn.innerHTML; } }
 const userName = email => (S.users.find(u => u.email === email) || {}).name || email || '';
+const sharedNames = r => String(r.shareTo || '').split(/[,、\s]+/).filter(Boolean).map(userName);
+// 公開範囲の印（社内非公開／限定公開：○○さんのみ）
+const pubChip = r => r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : r.pub === S.pubOpts[2] ? `<span class="chip priv">限定公開：${esc(sharedNames(r).join('・') || '相手未設定')}</span>` : '';
 const yen = man => { const n = Number(String(man).replace(/[^\d.]/g, '')); if (!man || isNaN(n)) return '価格要確認'; return n >= 10000 ? (n / 10000).toFixed(2).replace(/\.?0+$/, '') + '億円' : n.toLocaleString() + '万円'; };
 const specs = kind => S.specs[kind];
 const missingReq = (kind, r) => specs(kind).some(s => s.req && (r[s.k] === '' || r[s.k] == null));
@@ -264,7 +268,7 @@ function markNew(){
   const key = 'sg_seen_' + S.me.email;
   let last = ls.get(key);
   if (!last) { const d = new Date(Date.now() - 3 * 864e5); last = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0') + ' 00:00'; } // 初回は直近3日分
-  const fresh = r => r.owner !== S.me.email && r.pub !== S.pubOpts[1] && String(r.created || '') > last;
+  const fresh = r => r.owner !== S.me.email && r.pub !== S.pubOpts[1] && (r.pub !== S.pubOpts[2] || String(r.shareTo || '').toLowerCase().indexOf(S.me.email.toLowerCase()) >= 0) && String(r.created || '') > last;
   S.newIds = {};
   S.deals.concat(S.needs).filter(fresh).forEach(r => { S.newIds[r.id] = 1; });
   const all = S.deals.concat(S.needs).map(r => String(r.created || '')).sort();
@@ -298,7 +302,7 @@ function staleBanner(){
 function tobiItem(r){
   return `<button class="item" data-id="${esc(r.id)}">
     <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
-    <span style="min-width:0"><span class="t">${esc(r.title || r.addr || '（案件名 要確認）')}</span>${isStale(r) ? '<span class="chip newc">1か月経過</span>' : ''}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}<span class="chip">${esc(r.status || '未接触')}</span>
+    <span style="min-width:0"><span class="t">${esc(r.title || r.addr || '（案件名 要確認）')}</span>${isStale(r) ? '<span class="chip newc">1か月経過</span>' : ''}${pubChip(r)}<span class="chip">${esc(r.status || '未接触')}</span>
       <span class="m">${esc([ownersSum(r.owners), '担当 ' + userName(r.owner), r.lastContact ? '最終接触 ' + r.lastContact : '接触の記録なし', r.nextAt && '次回 ' + r.nextAt].filter(Boolean).join('・'))}</span></span>
     <span class="price">${r.exitPrice ? '出口 ' + yen(r.exitPrice) : '出口価格 未入力'}</span></button>`;
 }
@@ -334,12 +338,12 @@ function renderList(){
     $('#rows').innerHTML = list.length ? list.map(r => k === 'tobi' ? tobiItem(r) : k === 'deal' ? `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
-        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
+        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${pubChip(r)}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
           <span class="m">${esc([r.shubetsu, '担当 ' + userName(r.owner), r.shoryu, '回答' + (S.respCount[r.id] || 0) + '件'].filter(Boolean).join('・'))}</span></span>
         <span class="price">${yen(r.price)}</span></button>` : `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
-        <span style="min-width:0"><span class="t">${esc(r.client || '（顧客名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}${r.status && r.status !== '探索中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('need', r) ? '<span class="chip need">要確認あり</span>' : ''}
+        <span style="min-width:0"><span class="t">${esc(r.client || '（顧客名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${pubChip(r)}${r.status && r.status !== '探索中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('need', r) ? '<span class="chip need">要確認あり</span>' : ''}
           <span class="m">${esc([r.types, r.area, '担当 ' + userName(r.owner)].filter(Boolean).join('・'))}</span></span>
         <span class="price">${esc(r.budget ? r.budget + '万円' : '予算要確認')}</span></button>`).join('')
       : `<div class="empty">${rows.length ? '条件に合う案件はありません。' : (k === 'deal' ? 'まだ売り情報がありません。上の「登録」から、販売図面などの資料を入れて最初の案件を登録してください。' : k === 'tobi' ? 'まだ飛び込みの案件がありません。「登録 → 飛び込み（地上げ）」から登録できます。' : 'まだ買ニーズがありません。「登録 → 買ニーズ」から、買主の文面やスクショで登録できます。')}</div>`;
@@ -393,6 +397,7 @@ function fieldHtml(sp, p){
   switch (sp.t) {
     case 'select': return wrap(`<select id="${id}"><option value="">選択してください</option>${sp.o.map(o => `<option>${esc(o)}</option>`).join('')}</select>${sp.other ? `<input id="${id}-other" class="other" placeholder="商流を入力（例：売主→元付→A→B→sIgNaL）" hidden>` : ''}`);
     case 'user': return wrap(`<select id="${id}"><option value="">選択してください</option>${S.users.map(u => `<option value="${esc(u.email)}">${esc(u.name)}</option>`).join('')}</select>`);
+    case 'users': return `<div class="f full grp" data-k="${sp.k}"><span class="lbl">${esc(sp.l)}<span class="m">（選んだ人と、担当者・管理者だけが見られます）</span></span><div class="checks">${S.users.map((u, i) => `<label><input type="checkbox" id="${id}-${i}" value="${esc(u.email)}">${esc(u.name)}</label>`).join('')}</div></div>`;
     case 'checks': return `<div class="f full grp" data-k="${sp.k}"><span class="lbl">${esc(sp.l)}</span><div class="checks">${sp.o.map((o, i) => `<label><input type="checkbox" id="${id}-${i}" value="${esc(o)}">${esc(o)}</label>`).join('')}</div></div>`;
     case 'check': return `<div class="f full" data-k="${sp.k}"><label class="inline"><input type="checkbox" id="${id}">${esc(sp.l)}</label></div>`;
     case 'textarea': return wrap(`<textarea id="${id}" rows="3" placeholder="${esc(sp.ph || '')}"></textarea>`);
@@ -402,6 +407,7 @@ function fieldHtml(sp, p){
 function getVal(sp, p){
   const id = p + '-' + sp.k, el = document.getElementById(id);
   if (sp.t === 'checks') return sp.o.filter((o, i) => document.getElementById(id + '-' + i).checked).join('、');
+  if (sp.t === 'users') return S.users.filter((u, i) => document.getElementById(id + '-' + i).checked).map(u => u.email).join(',');
   if (sp.t === 'check') return el.checked ? 'はい' : '';
   if (sp.t === 'select' && sp.other && el.value === 'その他') return document.getElementById(id + '-other').value.trim();
   return el.value.trim();
@@ -411,6 +417,7 @@ function setVal(sp, p, v){
   v = v == null ? '' : v;
   if (sp.t === 'checks') { const arr = Array.isArray(v) ? v : String(v).split(/[、,]/).map(x => x.trim()); sp.o.forEach((o, i) => document.getElementById(id + '-' + i).checked = arr.indexOf(o) >= 0); return true; }
   if (sp.t === 'check') { el.checked = v === 'はい' || v === true; return true; }
+  if (sp.t === 'users') { const arr = String(v).toLowerCase().split(/[,、\s]+/); S.users.forEach((u, i) => document.getElementById(id + '-' + i).checked = arr.indexOf(u.email.toLowerCase()) >= 0); return true; }
   if (sp.t === 'select' || sp.t === 'user') {
     const opts = [...el.options].map(o => o.value);
     if (v === '' || opts.indexOf(String(v)) >= 0) { el.value = v; if (sp.other) document.getElementById(id + '-other').hidden = true; return true; }
@@ -473,6 +480,13 @@ function bindForm(kind, p, rec, opt){
     setVal(s, p, v);
   });
   if (rec && det(sp).some(s => rec[s.k])) { const m = $('#' + p + '-more'); if (m) m.open = true; }
+  // 「指定した人だけに公開」を選んだときだけ、公開する相手を選ぶ欄を出す
+  const pubSel = $(`#${p}-pub`), shareBox = document.querySelector(`#${p}-form [data-k="shareTo"]`);
+  if (pubSel && shareBox) {
+    const own = () => { const o = $(`#${p}-owner`); return o ? o.value : S.me.email; };
+    const syncShare = () => { shareBox.hidden = pubSel.value !== S.pubOpts[2]; S.users.forEach((u, i) => { const l = document.getElementById(`${p}-shareTo-${i}`).closest('label'); l.hidden = u.email === own(); }); };
+    pubSel.addEventListener('change', syncShare); const ow = $(`#${p}-owner`); if (ow) ow.addEventListener('change', syncShare); syncShare();
+  }
   if (opt.readonly) { document.querySelectorAll(`#${p}-form input,#${p}-form select,#${p}-form textarea`).forEach(e => e.disabled = true); return; }
   // 編集時は、空いている必須項目を赤枠で見せる
   if (rec) sp.forEach(s => { if (s.req && isEmpty(s, p)) mark(s, p, 'tbc'); });
@@ -790,7 +804,7 @@ function drawDetail(){
             : kind === 'tobi' ? [r.id, '担当 ' + userName(r.owner), r.exitPrice && '予想出口 ' + yen(r.exitPrice), r.lastContact ? '最終接触 ' + r.lastContact : '接触の記録なし']
             : [r.id, r.style, r.person, r.contact];
   $('#app').innerHTML = `<button class="back" id="back">← ${kind === 'buyer' ? '取引先' : '案件一覧'}</button>
-    <h1>${kind !== 'buyer' ? `<span class="rank ${r.rank || 'none'}" style="display:inline-grid;width:30px;height:30px;font-size:15px;vertical-align:3px;margin-right:8px">${esc(r.rank || '－')}</span>` : ''}${esc(title)}${r.pub === S.pubOpts[1] ? '<span class="chip priv">社内非公開</span>' : ''}</h1>
+    <h1>${kind !== 'buyer' ? `<span class="rank ${r.rank || 'none'}" style="display:inline-grid;width:30px;height:30px;font-size:15px;vertical-align:3px;margin-right:8px">${esc(r.rank || '－')}</span>` : ''}${esc(title)}${pubChip(r)}</h1>
     <p class="sub">${esc(sub.filter(Boolean).join('・'))}</p>
     ${kind !== 'buyer' ? statusHtml(kind, d) : ''}
     ${kind === 'tobi' ? ownersBoard(d) : ''}
