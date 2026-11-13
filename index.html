@@ -330,6 +330,15 @@ function tobiItem(r){
       <span class="m">${esc([ownersSum(r.owners), '担当 ' + userName(r.owner), r.lastContact ? '最終接触 ' + r.lastContact : '接触の記録なし', r.nextAt && '次回 ' + r.nextAt].filter(Boolean).join('・'))}</span></span>
     <span class="price">${r.exitPrice ? '出口 ' + yen(r.exitPrice) : '出口価格 未入力'}</span></button>`;
 }
+// 種別での絞り込み（「一棟収益」などはまとめて探せる）
+const TYPE_GROUPS = [['一棟収益', /一棟|ビル|アパート/], ['区分', /区分/], ['土地', /土地/], ['戸建', /戸建|一戸建/], ['店舗・事務所', /店舗|事務所/]];
+function typeOpts(k){ const sp = specs(k).find(s => s.k === 'shubetsu' || s.k === 'types'); return sp ? sp.o : []; }
+function typeOk(v, ft){
+  if (!ft) return true;
+  v = String(v || '');
+  if (ft.indexOf('g:') === 0) { const g = TYPE_GROUPS.find(x => x[0] === ft.slice(2)); return !!g && g[1].test(v); }
+  return v.split(/[、,／\/]/).map(x => x.trim()).indexOf(ft) >= 0 || v === ft;
+}
 function renderList(){
   const k = S.listKind;
   const rows = k === 'deal' ? S.deals : k === 'tobi' ? (S.tobis || []) : S.needs;
@@ -343,6 +352,7 @@ function renderList(){
     <div class="filters">
       <input id="q" type="search" placeholder="物件名・所在地・顧客名で探す" aria-label="検索">
       <select id="fo" aria-label="担当者"><option value="">全担当者</option>${S.users.map(u => `<option value="${esc(u.email)}">${esc(u.name)}</option>`).join('')}</select>
+      <select id="ft" aria-label="種別"><option value="">全種別</option><optgroup label="まとめて">${TYPE_GROUPS.map(g => `<option value="g:${g[0]}"${S.ftype === 'g:' + g[0] ? ' selected' : ''}>${g[0]}</option>`).join('')}</optgroup><optgroup label="種別ごと">${typeOpts(k).map(o => `<option${S.ftype === o ? ' selected' : ''}>${esc(o)}</option>`).join('')}</optgroup></select>
       <select id="fs" aria-label="ステータス"><option value="">全ステータス</option>${statuses.map(s => `<option>${s}</option>`).join('')}</select>
       <select id="fsort" aria-label="並び順">${[['new', '登録日が新しい順'], ['old', '登録日が古い順'], ['rank', '優先度順（S→D）']].map(([v, t]) => `<option value="${v}"${(S.sort || 'new') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
       ${k !== 'need' ? `<div class="seg" role="group" aria-label="表示"><button data-lv="list" aria-pressed="${!S.mapView}">リスト</button><button data-lv="map" aria-pressed="${!!S.mapView}">マップで見る</button></div>` : ''}
@@ -354,8 +364,8 @@ function renderList(){
   if (S.mapObj) { S.mapObj.remove(); S.mapObj = null; } // 一覧を描き直したら地図も作り直す
   document.querySelectorAll('[data-new]').forEach(a => a.onclick = () => { const [kk, id] = a.dataset.new.split(':'); go('detail', { dkind: kk, did: id, dtab: kk === 'deal' ? 'gaiyo' : 'info' }); });
   const draw = () => {
-    const q = $('#q').value.trim(), fo = $('#fo').value, fs = $('#fs').value;
-    const list = rows.filter(r => (!fo || r.owner === fo) && (!fs || (r.status || statuses[0]) === fs) && (!q || JSON.stringify([r.title, r.addr, r.client, r.area, r.id, r.chiban, r.landlord]).indexOf(q) >= 0));
+    const q = $('#q').value.trim(), fo = $('#fo').value, fs = $('#fs').value, ft = S.ftype = $('#ft').value;
+    const list = rows.filter(r => (!fo || r.owner === fo) && typeOk(k === 'need' ? r.types : r.shubetsu, ft) && (!fs || (r.status || statuses[0]) === fs) && (!q || JSON.stringify([r.title, r.addr, r.client, r.area, r.id, r.chiban, r.landlord]).indexOf(q) >= 0));
     S.sort = $('#fsort').value;
     const age = r => String(r.created || '') + ' ' + String(r.id || '');
     const rk = r => { const i = S.ranks.indexOf(r.rank); return i < 0 ? 99 : i; };
@@ -377,7 +387,7 @@ function renderList(){
       : `<div class="empty">${rows.length ? '条件に合う案件はありません。' : (k === 'deal' ? 'まだ売り情報がありません。上の「登録」から、販売図面などの資料を入れて最初の案件を登録してください。' : k === 'tobi' ? 'まだ飛び込みの案件がありません。「登録 → 飛び込み（地上げ）」から登録できます。' : 'まだ買ニーズがありません。「登録 → 買ニーズ」から、買主の文面やスクショで登録できます。')}</div>`;
     document.querySelectorAll('#rows .item').forEach(b => b.onclick = () => go('detail', { dkind: k, did: b.dataset.id, dtab: k === 'deal' ? 'gaiyo' : k === 'tobi' ? 'owners' : 'info' }));
   };
-  ['q', 'fo', 'fs', 'fsort'].forEach(id => $('#' + id).oninput = draw);
+  ['q', 'fo', 'fs', 'ft', 'fsort'].forEach(id => $('#' + id).oninput = draw);
   document.querySelectorAll('[data-stale]').forEach(a => a.onclick = () => go('detail', { dkind: 'tobi', did: a.dataset.stale, dtab: 'owners' }));
   draw();
 }
@@ -445,7 +455,8 @@ function placePins(){
   });
   // 公開されていない案件：約1km四方の範囲を点線の円で（同じ範囲のものは1つにまとめる）
   const fo = $('#fo') ? $('#fo').value : '', fs = $('#fs') ? $('#fs').value : '';
-  const hid = (S.geoHidden[k] || []).filter(h => (!fo || h.owner === fo) && (!fs || (S.closedStatus || []).indexOf(fs) < 0));
+  const ft = $('#ft') ? $('#ft').value : '';
+  const hid = (S.geoHidden[k] || []).filter(h => (!fo || h.owner === fo) && (!fs || (S.closedStatus || []).indexOf(fs) < 0) && typeOk(String(h.sum || '').split('／')[0], ft));
   const cells = {};
   hid.forEach(h => { const key = h.cell.join(','); (cells[key] = cells[key] || []).push(h); });
   Object.values(cells).forEach(hs => {
