@@ -443,7 +443,8 @@ async function fetchGeo(k){
     for (let i = 0; i < 8; i++) {
       const x = await api('geo', { kind: k });
       Object.assign(S.geo[k], x.pts);
-      (k === 'deal' ? S.deals : S.tobis || []).forEach(r => { if (r.addr && !(r.id in x.pts)) S.geo[k][r.id] = S.geo[k][r.id] || null; });
+      // まだ調べ終わっていない住所があるうちは「分からない」にしない
+      if (!x.rest) (k === 'deal' ? S.deals : S.tobis || []).forEach(r => { if (r.addr && !(r.id in x.pts)) S.geo[k][r.id] = S.geo[k][r.id] || null; });
       if (S.mapK === k) placePins();
       if (!x.rest) break;
     }
