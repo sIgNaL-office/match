@@ -72,6 +72,10 @@ h2{font-family:var(--font-d);font-size:16px;margin:0 0 10px}
 .pin.off span{border-style:dashed}
 .pin.mine span{border-color:#111;border-width:3px}
 .pin-dot{background:var(--pc)}
+.hpin span{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#fff;border:2px dashed var(--pc);color:var(--pc);font:700 11px/1 system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.mpop .hrow{display:grid;grid-template-columns:12px 1fr;gap:6px;align-items:start;padding:4px 0;border-top:1px solid #e5e7eb}
+.mpop .hrow .pin-dot{margin-top:5px}
+.mpop .m{color:#6b7280;font-size:12px}
 .maplegend .who{display:inline-flex;align-items:center;gap:5px;padding:2px 8px 2px 4px;border:1px solid var(--line);border-radius:99px;background:var(--surface);cursor:pointer;font:inherit;font-size:12px;color:var(--fg)}
 .maplegend .who[aria-pressed="true"]{border-color:var(--fg);font-weight:700}
 .mpop{font-size:13px;line-height:1.5;min-width:200px}.mpop b{display:block;font-size:14px;margin-bottom:4px}
@@ -380,6 +384,7 @@ function renderList(){
 
 /* ===== マップで見る（国土地理院の地図。位置は住所から本体アプリが調べて控える） ===== */
 S.geo = { deal: {}, tobi: {} };
+S.geoHidden = { deal: [], tobi: [] };
 function loadLeaflet(){
   if (window.L) return Promise.resolve();
   if (S.leafletP) return S.leafletP;
@@ -438,17 +443,30 @@ function placePins(){
       <button class="btn sm" data-mopen="${esc(r.id)}">詳しく見る</button></div>`, { maxWidth: 280 }).addTo(S.mapPins);
     shown.push(g[r.id]);
   });
+  // 公開されていない案件：約1km四方の範囲を点線の円で（同じ範囲のものは1つにまとめる）
+  const fo = $('#fo') ? $('#fo').value : '', fs = $('#fs') ? $('#fs').value : '';
+  const hid = (S.geoHidden[k] || []).filter(h => (!fo || h.owner === fo) && (!fs || (S.closedStatus || []).indexOf(fs) < 0));
+  const cells = {};
+  hid.forEach(h => { const key = h.cell.join(','); (cells[key] = cells[key] || []).push(h); });
+  Object.values(cells).forEach(hs => {
+    const c = hs[0].cell, col = hs.length === 1 ? ownerColor(hs[0].owner) : '#555';
+    const html = `<div class="mpop"><b>公開されていない案件（${hs.length}件）</b><p class="m" style="margin:0 0 6px">おおよその位置：${esc(hs[0].area || '不明')}・この円の中のどこか（約1km）</p>
+      ${hs.map(h => `<div class="hrow"><i class="pin-dot" style="--pc:${ownerColor(h.owner)}"></i><div><b style="display:inline;font-size:13px">担当 ${esc(h.name)}</b>${h.mobile ? `<span class="m">（${esc(h.mobile)}）</span>` : ''}<div>${esc(h.sum)}</div></div></div>`).join('')}
+      <p class="m" style="margin:6px 0 0">詳しく知りたいときは担当者に連絡して、公開を依頼してください。</p></div>`;
+    L.circle(c, { radius: 650, color: col, weight: 2, dashArray: '6 6', fillColor: col, fillOpacity: .12 }).bindPopup(html, { maxWidth: 300 }).addTo(S.mapPins);
+    L.marker(c, { icon: L.divIcon({ className: 'hpin', html: `<span style="--pc:${col}">非${hs.length > 1 ? hs.length : ''}</span>`, iconSize: [28, 28], iconAnchor: [14, 14] }), title: '公開されていない案件' }).bindPopup(html, { maxWidth: 300 }).addTo(S.mapPins);
+  });
   const lg = $('#mlegend');
   if (lg) {
-    const owners = [...new Set(list.map(r => r.owner))].filter(Boolean);
+    const owners = [...new Set(list.map(r => r.owner).concat((S.geoHidden[k] || []).map(h => h.owner)))].filter(Boolean);
     const fo = $('#fo') ? $('#fo').value : '';
     lg.innerHTML = owners.map(e => `<button class="who" data-mown="${esc(e)}" aria-pressed="${fo === e}"><i class="pin-dot" style="--pc:${ownerColor(e)}"></i>${esc(userName(e))}${e === S.me.email ? '（自分）' : ''}</button>`).join('')
-      + '<span>黒い縁＝自分の案件・薄いピン＝他決・終了など・ピンの文字＝担当者</span>';
+      + '<span>黒い縁＝自分の案件・薄いピン＝他決・終了など・ピンの文字＝担当者・点線の円「非」＝公開されていない他の営業の案件（約1kmの範囲）</span>';
     lg.querySelectorAll('[data-mown]').forEach(b => b.onclick = () => { const f = $('#fo'); f.value = f.value === b.dataset.mown ? '' : b.dataset.mown; f.dispatchEvent(new Event('input')); });
   }
   if (S.mapFit && shown.length) { m.fitBounds(L.latLngBounds(shown).pad(0.15), { maxZoom: 15 }); S.mapFit = !!wait.length; }
   const note = $('#mapnote');
-  if (note) note.innerHTML = `${shown.length}件を表示${wait.length ? `・位置を調べています（残り${wait.length}件）` : ''}${lost.length ? `・住所から位置が分からない案件 ${lost.length}件：${lost.slice(0, 5).map(r => `<a data-mopen2="${esc(r.id)}">${esc(r.title || r.id)}</a>`).join('、')}${lost.length > 5 ? ' ほか' : ''}` : ''}`;
+  if (note) note.innerHTML = `${shown.length}件を表示${hid.length ? `・公開されていない案件 ${hid.length}件（おおよその範囲）` : ''}${wait.length ? `・位置を調べています（残り${wait.length}件）` : ''}${lost.length ? `・住所から位置が分からない案件 ${lost.length}件：${lost.slice(0, 5).map(r => `<a data-mopen2="${esc(r.id)}">${esc(r.title || r.id)}</a>`).join('、')}${lost.length > 5 ? ' ほか' : ''}` : ''}`;
   document.querySelectorAll('[data-mopen2]').forEach(a => a.onclick = () => go('detail', { dkind: k, did: a.dataset.mopen2, dtab: k === 'deal' ? 'gaiyo' : 'owners' }));
 }
 async function fetchGeo(k){
@@ -458,6 +476,7 @@ async function fetchGeo(k){
     for (let i = 0; i < 8; i++) {
       const x = await api('geo', { kind: k });
       Object.assign(S.geo[k], x.pts);
+      if (!x.rest) S.geoHidden[k] = x.hidden || [];
       // まだ調べ終わっていない住所があるうちは「分からない」にしない
       if (!x.rest) (k === 'deal' ? S.deals : S.tobis || []).forEach(r => { if (r.addr && !(r.id in x.pts)) S.geo[k][r.id] = S.geo[k][r.id] || null; });
       if (S.mapK === k) placePins();
