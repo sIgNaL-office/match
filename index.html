@@ -57,6 +57,19 @@ h2{font-family:var(--font-d);font-size:16px;margin:0 0 10px}
 .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .filters select,.filters input{width:auto;min-width:120px}
 .filters input{flex:1}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;padding:6px 12px;border:0;background:var(--surface);color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff;font-weight:700}
+.map{height:min(68vh,620px);min-height:360px;border:1px solid var(--line);border-radius:10px;z-index:0}
+.maplegend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted);margin-top:8px}
+.maplegend span{display:inline-flex;align-items:center;gap:5px}
+.pin-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+.pin span{display:block;width:24px;height:24px;margin:1px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.pin span::after{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:#fff;left:6px;top:6px}
+.pin.new span,.pin-dot.new{background:#2f6f74}.pin.warm span,.pin-dot.warm{background:#d9822b}.pin.done span,.pin-dot.done{background:#2e8b57}.pin.off span,.pin-dot.off{background:#9aa3a8}
+.mpop{font-size:13px;line-height:1.5;min-width:200px}.mpop b{display:block;font-size:14px;margin-bottom:4px}
+.mpop dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:6px 0 8px}.mpop dt{color:#6b7280}.mpop dd{margin:0}
+.mpop .chip{margin:0 0 4px}
 .list{display:grid;gap:8px}
 .item{display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:11px 14px;cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}
 .item:hover{border-color:var(--accent)}
@@ -321,10 +334,13 @@ function renderList(){
       <select id="fo" aria-label="担当者"><option value="">全担当者</option>${S.users.map(u => `<option value="${esc(u.email)}">${esc(u.name)}</option>`).join('')}</select>
       <select id="fs" aria-label="ステータス"><option value="">全ステータス</option>${statuses.map(s => `<option>${s}</option>`).join('')}</select>
       <select id="fsort" aria-label="並び順">${[['new', '登録日が新しい順'], ['old', '登録日が古い順'], ['rank', '優先度順（S→D）']].map(([v, t]) => `<option value="${v}"${(S.sort || 'new') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      ${k !== 'need' ? `<div class="seg" role="group" aria-label="表示"><button data-lv="list" aria-pressed="${!S.mapView}">リスト</button><button data-lv="map" aria-pressed="${!!S.mapView}">マップで見る</button></div>` : ''}
     </div>
     <div class="list" id="rows"></div>`;
   document.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => { S.listKind = b.dataset.lk; renderList(); });
   const nx = $('#newx'); if (nx) nx.onclick = () => { S.newClosed = true; renderList(); };
+  document.querySelectorAll('[data-lv]').forEach(b => b.onclick = () => { S.mapView = b.dataset.lv === 'map'; renderList(); });
+  if (S.mapObj) { S.mapObj.remove(); S.mapObj = null; } // 一覧を描き直したら地図も作り直す
   document.querySelectorAll('[data-new]').forEach(a => a.onclick = () => { const [kk, id] = a.dataset.new.split(':'); go('detail', { dkind: kk, did: id, dtab: kk === 'deal' ? 'gaiyo' : 'info' }); });
   const draw = () => {
     const q = $('#q').value.trim(), fo = $('#fo').value, fs = $('#fs').value;
@@ -335,6 +351,7 @@ function renderList(){
     list.sort((a, b) => S.sort === 'old' ? (age(a) < age(b) ? -1 : 1)
       : S.sort === 'rank' ? (rk(a) - rk(b) || prog(k, b) - prog(k, a) || (age(a) < age(b) ? 1 : -1)) // 同じランクなら、進んでいる案件を上に
       : (age(a) < age(b) ? 1 : -1));
+    if (S.mapView && k !== 'need') { S.mapFit = true; mapDraw(k, list, rows.length); return; }
     $('#rows').innerHTML = list.length ? list.map(r => k === 'tobi' ? tobiItem(r) : k === 'deal' ? `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
@@ -352,6 +369,86 @@ function renderList(){
   ['q', 'fo', 'fs', 'fsort'].forEach(id => $('#' + id).oninput = draw);
   document.querySelectorAll('[data-stale]').forEach(a => a.onclick = () => go('detail', { dkind: 'tobi', did: a.dataset.stale, dtab: 'owners' }));
   draw();
+}
+
+/* ===== マップで見る（国土地理院の地図。位置は住所から本体アプリが調べて控える） ===== */
+S.geo = { deal: {}, tobi: {} };
+function loadLeaflet(){
+  if (window.L) return Promise.resolve();
+  if (S.leafletP) return S.leafletP;
+  S.leafletP = new Promise((ok, ng) => {
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(css);
+    const js = document.createElement('script'); js.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    js.onload = ok; js.onerror = () => { S.leafletP = null; ng(new Error('地図を読み込めませんでした。電波の良いところでもう一度開いてください')); };
+    document.head.appendChild(js);
+  });
+  return S.leafletP;
+}
+// ピンの色：進行中・合意以降・止まったもの
+function pinTone(k, r){
+  const st = r.status || (k === 'tobi' ? '未接触' : '販売中');
+  if (/他決|終了|見送り|拒否/.test(st)) return 'off';
+  if (/契約|決済|合意|成約/.test(st)) return 'done';
+  if (/検討|買付|交渉|条件|面談/.test(st)) return 'warm';
+  return 'new';
+}
+function mapDraw(k, list, total){
+  S.mapList = list; S.mapK = k;
+  if (!$('#map') || !S.mapObj) {
+    $('#rows').innerHTML = `<div class="mapwrap"><div id="map" class="map" role="region" aria-label="案件の地図"></div>
+      <div class="maplegend"><span><i class="pin-dot new"></i>${k === 'tobi' ? '未接触・訪問' : '販売中'}</span><span><i class="pin-dot warm"></i>検討・交渉中</span><span><i class="pin-dot done"></i>合意・契約以降</span><span><i class="pin-dot off"></i>他決・終了など</span></div>
+      <p class="sub" id="mapnote" style="margin:6px 0 0">地図を読み込んでいます…</p></div>`;
+  }
+  loadLeaflet().then(() => {
+    if (!S.mapObj) {
+      const base = {
+        '地図': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>' }),
+        '淡色': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>' }),
+        '写真': L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', { maxZoom: 18, attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>' })
+      };
+      S.mapObj = L.map('map', { layers: [base['淡色']], zoomControl: true }).setView([35.68, 139.70], 11);
+      L.control.layers(base, null, { position: 'topright' }).addTo(S.mapObj);
+      S.mapPins = L.layerGroup().addTo(S.mapObj);
+      $('#map').addEventListener('click', e => { const a = e.target.closest('[data-mopen]'); if (a) go('detail', { dkind: S.mapK, did: a.dataset.mopen, dtab: S.mapK === 'deal' ? 'gaiyo' : 'owners' }); });
+    }
+    placePins(); fetchGeo(k);
+  }).catch(e => { const n = $('#mapnote'); if (n) n.textContent = e.message; });
+}
+function placePins(){
+  const k = S.mapK, list = S.mapList || [], g = S.geo[k], m = S.mapObj; if (!m) return;
+  S.mapPins.clearLayers();
+  const shown = [], lost = [], wait = [];
+  list.forEach(r => {
+    if (!r.addr) { lost.push(r); return; }
+    if (!(r.id in g)) { wait.push(r); return; }
+    if (!g[r.id]) { lost.push(r); return; }
+    const icon = L.divIcon({ className: 'pin ' + pinTone(k, r), html: '<span></span>', iconSize: [26, 34], iconAnchor: [13, 33], popupAnchor: [0, -30] });
+    const rows = [['登録日', String(r.created || '').slice(0, 10)], [k === 'tobi' ? '進捗' : '状況', r.status || (k === 'tobi' ? '未接触' : '販売中')], ['種別', r.shubetsu || '未入力'],
+      k === 'deal' ? ['価格', r.priceShow === '載せない（「相談」と表示）' ? yen(r.price) + '（概要書は相談）' : yen(r.price)] : ['予想出口', r.exitPrice ? yen(r.exitPrice) : '未入力'],
+      ['担当', userName(r.owner)], ['所在地', r.addr]];
+    L.marker(g[r.id], { icon, title: r.title || r.addr }).bindPopup(`<div class="mpop"><b>${esc(r.title || r.addr)}</b>${pubChip(r)}
+      <dl>${rows.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b || '－')}</dd>`).join('')}</dl>
+      <button class="btn sm" data-mopen="${esc(r.id)}">詳しく見る</button></div>`, { maxWidth: 280 }).addTo(S.mapPins);
+    shown.push(g[r.id]);
+  });
+  if (S.mapFit && shown.length) { m.fitBounds(L.latLngBounds(shown).pad(0.15), { maxZoom: 15 }); S.mapFit = !!wait.length; }
+  const note = $('#mapnote');
+  if (note) note.innerHTML = `${shown.length}件を表示${wait.length ? `・位置を調べています（残り${wait.length}件）` : ''}${lost.length ? `・住所から位置が分からない案件 ${lost.length}件：${lost.slice(0, 5).map(r => `<a data-mopen2="${esc(r.id)}">${esc(r.title || r.id)}</a>`).join('、')}${lost.length > 5 ? ' ほか' : ''}` : ''}`;
+  document.querySelectorAll('[data-mopen2]').forEach(a => a.onclick = () => go('detail', { dkind: k, did: a.dataset.mopen2, dtab: k === 'deal' ? 'gaiyo' : 'owners' }));
+}
+async function fetchGeo(k){
+  if ((S.mapList || []).every(r => !r.addr || r.id in S.geo[k]) || S.geoBusy) return;
+  S.geoBusy = true;
+  try {
+    for (let i = 0; i < 8; i++) {
+      const x = await api('geo', { kind: k });
+      Object.assign(S.geo[k], x.pts);
+      (k === 'deal' ? S.deals : S.tobis || []).forEach(r => { if (r.addr && !(r.id in x.pts)) S.geo[k][r.id] = S.geo[k][r.id] || null; });
+      if (S.mapK === k) placePins();
+      if (!x.rest) break;
+    }
+  } catch (e) { const n = $('#mapnote'); if (n) n.textContent = '位置を調べられませんでした：' + e.message; }
+  S.geoBusy = false;
 }
 
 // 取引先を「得意な案件」で絞る（立退き・底地などはメモや条件の書きぶりからも探す。種別は得意分野のチェックで）
