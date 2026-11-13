@@ -64,9 +64,16 @@ h2{font-family:var(--font-d);font-size:16px;margin:0 0 10px}
 .maplegend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted);margin-top:8px}
 .maplegend span{display:inline-flex;align-items:center;gap:5px}
 .pin-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
-.pin span{display:block;width:24px;height:24px;margin:1px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)}
-.pin span::after{content:"";position:absolute;width:8px;height:8px;border-radius:50%;background:#fff;left:6px;top:6px}
-.pin.new span,.pin-dot.new{background:#2f6f74}.pin.warm span,.pin-dot.warm{background:#d9822b}.pin.done span,.pin-dot.done{background:#2e8b57}.pin.off span,.pin-dot.off{background:#9aa3a8}
+.map.toned .leaflet-tile-pane{filter:grayscale(1) contrast(.85) brightness(1.08);opacity:.7}
+.pin{position:relative}
+.pin span{position:absolute;left:2px;top:1px;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--pc);border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.45)}
+.pin b{position:absolute;left:2px;top:1px;width:32px;height:32px;display:grid;place-items:center;color:#fff;font:700 12px/1 system-ui,sans-serif;text-shadow:0 0 2px rgba(0,0,0,.35)}
+.pin.off{opacity:.5}
+.pin.off span{border-style:dashed}
+.pin.mine span{border-color:#111;border-width:3px}
+.pin-dot{background:var(--pc)}
+.maplegend .who{display:inline-flex;align-items:center;gap:5px;padding:2px 8px 2px 4px;border:1px solid var(--line);border-radius:99px;background:var(--surface);cursor:pointer;font:inherit;font-size:12px;color:var(--fg)}
+.maplegend .who[aria-pressed="true"]{border-color:var(--fg);font-weight:700}
 .mpop{font-size:13px;line-height:1.5;min-width:200px}.mpop b{display:block;font-size:14px;margin-bottom:4px}
 .mpop dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:6px 0 8px}.mpop dt{color:#6b7280}.mpop dd{margin:0}
 .mpop .chip{margin:0 0 4px}
@@ -384,19 +391,16 @@ function loadLeaflet(){
   });
   return S.leafletP;
 }
-// ピンの色：進行中・合意以降・止まったもの
-function pinTone(k, r){
-  const st = r.status || (k === 'tobi' ? '未接触' : '販売中');
-  if (/他決|終了|見送り|拒否/.test(st)) return 'off';
-  if (/契約|決済|合意|成約/.test(st)) return 'done';
-  if (/検討|買付|交渉|条件|面談/.test(st)) return 'warm';
-  return 'new';
-}
+// ピンの色は担当者ごと（はっきり見分けられる色を順に割り当て）。他決・終了などは薄く表示
+const PIN_COLORS = ['#e0313b', '#2a5bd7', '#f08c00', '#8a3fd1', '#0f9d8a', '#d6336c', '#5c940d', '#1c7ed6', '#a0522d', '#495057'];
+function ownerColor(email){ const i = S.users.findIndex(u => u.email === email); return PIN_COLORS[(i < 0 ? S.users.length : i) % PIN_COLORS.length]; }
+const ownerMark = email => (userName(email) || '？').replace(/\s.*$/, '').slice(0, 1);
+const isClosed = r => /他決|終了|見送り|拒否/.test(r.status || '');
 function mapDraw(k, list, total){
   S.mapList = list; S.mapK = k;
   if (!$('#map') || !S.mapObj) {
     $('#rows').innerHTML = `<div class="mapwrap"><div id="map" class="map" role="region" aria-label="案件の地図"></div>
-      <div class="maplegend"><span><i class="pin-dot new"></i>${k === 'tobi' ? '未接触・訪問' : '販売中'}</span><span><i class="pin-dot warm"></i>検討・交渉中</span><span><i class="pin-dot done"></i>合意・契約以降</span><span><i class="pin-dot off"></i>他決・終了など</span></div>
+      <div class="maplegend" id="mlegend"></div>
       <p class="sub" id="mapnote" style="margin:6px 0 0">地図を読み込んでいます…</p></div>`;
   }
   loadLeaflet().then(() => {
@@ -408,6 +412,9 @@ function mapDraw(k, list, total){
       };
       S.mapObj = L.map('map', { layers: [base['淡色']], zoomControl: true }).setView([35.68, 139.70], 11);
       L.control.layers(base, null, { position: 'topright' }).addTo(S.mapObj);
+      // 地図は色を抜いて薄くし、ピンが目立つように（写真のときはそのまま）
+      $('#map').classList.add('toned');
+      S.mapObj.on('baselayerchange', e => $('#map').classList.toggle('toned', e.name !== '写真'));
       S.mapPins = L.layerGroup().addTo(S.mapObj);
       $('#map').addEventListener('click', e => { const a = e.target.closest('[data-mopen]'); if (a) go('detail', { dkind: S.mapK, did: a.dataset.mopen, dtab: S.mapK === 'deal' ? 'gaiyo' : 'owners' }); });
     }
@@ -422,7 +429,7 @@ function placePins(){
     if (!r.addr) { lost.push(r); return; }
     if (!(r.id in g)) { wait.push(r); return; }
     if (!g[r.id]) { lost.push(r); return; }
-    const icon = L.divIcon({ className: 'pin ' + pinTone(k, r), html: '<span></span>', iconSize: [26, 34], iconAnchor: [13, 33], popupAnchor: [0, -30] });
+    const icon = L.divIcon({ className: 'pin' + (isClosed(r) ? ' off' : '') + (r.owner === S.me.email ? ' mine' : ''), html: `<span style="--pc:${ownerColor(r.owner)}"></span><b>${esc(ownerMark(r.owner))}</b>`, iconSize: [36, 44], iconAnchor: [18, 42], popupAnchor: [0, -38] });
     const rows = [['登録日', String(r.created || '').slice(0, 10)], [k === 'tobi' ? '進捗' : '状況', r.status || (k === 'tobi' ? '未接触' : '販売中')], ['種別', r.shubetsu || '未入力'],
       k === 'deal' ? ['価格', r.priceShow === '載せない（「相談」と表示）' ? yen(r.price) + '（概要書は相談）' : yen(r.price)] : ['予想出口', r.exitPrice ? yen(r.exitPrice) : '未入力'],
       ['担当', userName(r.owner)], ['所在地', r.addr]];
@@ -431,6 +438,14 @@ function placePins(){
       <button class="btn sm" data-mopen="${esc(r.id)}">詳しく見る</button></div>`, { maxWidth: 280 }).addTo(S.mapPins);
     shown.push(g[r.id]);
   });
+  const lg = $('#mlegend');
+  if (lg) {
+    const owners = [...new Set(list.map(r => r.owner))].filter(Boolean);
+    const fo = $('#fo') ? $('#fo').value : '';
+    lg.innerHTML = owners.map(e => `<button class="who" data-mown="${esc(e)}" aria-pressed="${fo === e}"><i class="pin-dot" style="--pc:${ownerColor(e)}"></i>${esc(userName(e))}${e === S.me.email ? '（自分）' : ''}</button>`).join('')
+      + '<span>黒い縁＝自分の案件・薄いピン＝他決・終了など・ピンの文字＝担当者</span>';
+    lg.querySelectorAll('[data-mown]').forEach(b => b.onclick = () => { const f = $('#fo'); f.value = f.value === b.dataset.mown ? '' : b.dataset.mown; f.dispatchEvent(new Event('input')); });
+  }
   if (S.mapFit && shown.length) { m.fitBounds(L.latLngBounds(shown).pad(0.15), { maxZoom: 15 }); S.mapFit = !!wait.length; }
   const note = $('#mapnote');
   if (note) note.innerHTML = `${shown.length}件を表示${wait.length ? `・位置を調べています（残り${wait.length}件）` : ''}${lost.length ? `・住所から位置が分からない案件 ${lost.length}件：${lost.slice(0, 5).map(r => `<a data-mopen2="${esc(r.id)}">${esc(r.title || r.id)}</a>`).join('、')}${lost.length > 5 ? ' ほか' : ''}` : ''}`;
