@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>sIgNaL desk</title>
+<meta name="theme-color" content="#2b3864">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="sIgNaL desk">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;background:#f4f6f7;color:#1b2328;padding:24px}
+  .box{max-width:420px;width:100%;text-align:center}
+  .icon{width:112px;height:112px;border-radius:26px;box-shadow:0 6px 20px rgba(43,56,100,.25)}
+  h1{font-size:22px;margin:16px 0 4px;color:#2b3864}
+  p{color:#5b6870;font-size:14px;line-height:1.7;margin:6px 0}
+  .open{display:block;margin:22px 0 10px;padding:16px;border-radius:14px;background:linear-gradient(135deg,#2b3864,#367069);color:#fff;text-decoration:none;font-weight:700;font-size:17px}
+  .how{margin-top:26px;text-align:left;background:#fff;border:1px solid #dde3e6;border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.9}
+  .how b{color:#2b3864}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<div class="box">
+  <img class="icon" src="apple-touch-icon.png" alt="sIgNaL desk">
+  <h1>sIgNaL desk</h1>
+  <p id="msg">不動産業務サポート</p>
+  <a class="open" id="open" href="https://claude.ai/artifact/LCfUxTH7B4QJ3vvo27sf2r">sIgNaL deskを開く</a>
+  <div class="how" id="how">
+    <b>ホーム画面に追加する方法</b><br>
+    iPhone：Safariの共有ボタン → 「ホーム画面に追加」<br>
+    Android：Chromeのメニュー（︙）→ 「ホーム画面に追加」<br>
+    追加したアイコンから開くと、そのままsIgNaL deskが開きます。
+  </div>
+</div>
+<script>
+  // ホーム画面のアイコンから起動したときだけ、自動でアプリ（claude.ai上のsIgNaL desk）へ移動します
+  var APP = "https://claude.ai/artifact/LCfUxTH7B4QJ3vvo27sf2r";
+  var standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  if (standalone || /[?&]app=1/.test(location.search)) {
+    document.getElementById("how").className = "how hide";
+    document.getElementById("msg").textContent = "開いています…";
+    setTimeout(function(){ location.replace(APP); }, 150);
+  }
+</script>
+</body>
+</html>
