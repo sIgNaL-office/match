@@ -1131,7 +1131,7 @@ function saPages(){
         <tr><td>相続税路線価</td><td>国税庁が毎年7月に公表。地価公示の概ね8割の水準とされるため、0.8で割り戻して比較します。</td></tr>
         <tr><td>固定資産税評価額</td><td>市区町村が3年ごとに評価。地価公示の概ね7割の水準とされるため、0.7で割り戻して比較します。</td></tr>
       </table></div>
-    <div class="sa-note">※公的価格指標は標準的な土地の価格で、個別の形状・接道・面積等により実際の価格とは差が生じます。※地点格差は担当者が査定物件と地点の条件差を補正したものです。${S.idxMemo?`<br>※調査メモ：${esc(S.idxMemo)}`:""}${(S.webSources||[]).length?`<br>参照：${(S.webSources||[]).slice(0,5).map(x=>esc((x.t||x.u).slice(0,40))).join("／")}`:""}</div>`);}
+    <div class="sa-note">※公的価格指標は標準的な土地の価格で、個別の形状・接道・面積等により実際の価格とは差が生じます。※地点格差は担当者が査定物件と地点の条件差を補正したものです。${S.idxMemo?`<br>※調査メモ：${esc(String(S.idxMemo).slice(0,260))}`:""}${(S.webSources||[]).length?`<br>参照：${(S.webSources||[]).slice(0,5).map(x=>esc((x.t||x.u).slice(0,40))).join("／")}`:""}</div>`);}
   // 査定結果
   const toTsubo=y=>C.sArea?tsuboMan((K==="house"?y-C.sBv:y)/C.sArea):"―";
   const plan=(cls,nm2,sub,y)=>`<div class="sa-plan ${cls}"><div class="sa-pn">${nm2}</div><div class="sa-ps">${sub}</div><div class="sa-pv">${man(y)}<small>万円</small></div><div class="sa-pt">${unitLbl} ${toTsubo(y)}万円</div></div>`;
@@ -1443,7 +1443,7 @@ async function saAuto(){
       if(j){ st.sa.kijun=String(num(j.price)); st.sa.kijunName=[j.name,j.addr,j.near&&`（${j.near}）`].filter(Boolean).join(" "); st.sa.kijunYear=j.year||""; }
       if(o.rosen&&num(o.rosen.value)){ st.sa.rosen=String(num(o.rosen.value)); st.sa.rosenName=[o.rosen.year,o.rosen.note].filter(Boolean).join(" "); }
       if(o.zoning&&!st.sa.zoning) st.sa.zoning=String(o.zoning);
-      st.sa.idxMemo=[o.memo,o.rosen&&!num(o.rosen.value)&&o.rosen.note?`路線価：${o.rosen.note}`:""].filter(Boolean).join("／");
+      st.sa.idxMemo=[String(o.memo||"").slice(0,200),o.rosen&&!num(o.rosen.value)&&o.rosen.note?`路線価：${o.rosen.note}`:""].filter(Boolean).join("／");
       st.sa.webSources=mergeSrc(st.sa.webSources,r.sources);
       line(`　→ 公示地価 ${k?comma(num(k.price))+"円/㎡":"見つからず"}／基準地価 ${j?comma(num(j.price))+"円/㎡":"見つからず"}／路線価 ${st.sa.rosen?st.sa.rosen+"千円/㎡":"特定できず"}`,k||j?"ok":"warn");
     }
@@ -1459,7 +1459,8 @@ async function saAuto(){
 ${S.kind==="mansion"?"・同じマンション内の事例があれば最優先":""}
 最後に、次の形のJSON配列だけを出力（前後に文章を付けない）：
 [{"kind":"成約"または"売出","date":"YYYY-MM（成約時期・掲載時期）","name":"物件名（なければ\"\"）","addr":"所在","price":価格（万円の数値）,"area":${S.kind==="mansion"?"専有面積㎡":"土地面積㎡"}の数値,"barea":建物面積㎡（戸建のみ、なければ""）,"built":"YYYY-MM","floor":所在階,"dir":"向き","walk":駅徒歩分の数値,"layout":"間取り","src":"情報源のサイト名"}]
-確認できない値は "" とし、推測で埋めない。価格と面積が分からない事例は入れない。`,6);
+確認できない値は "" とし、推測で埋めない。価格と面積が分からない事例は入れない。
+重要：AIや統計による推定価格・査定価格（イエシル、マンションレビューの推定相場、HowMa等）は事例に入れない。"成約"は国土交通省の取引価格・レインズ・不動産会社の成約事例として明記された実際の価格だけにする。同じ物件の重複掲載は1件にまとめる。`,6);
       const arr=pickJSON(r.text,true)||[]; let n=0;
       arr.forEach(o=>{ if(!num(o.price)||!firstNum(o.area)) return; st.saCases.push({on:true,kind:o.kind==="成約"?"成約":"売出",date:o.date||"",name:o.name||"",addr:o.addr||"",price:String(num(o.price)),area:String(firstNum(o.area)),barea:o.barea?String(firstNum(o.barea)):"",built:o.built||"",floor:o.floor?String(firstNum(o.floor)):"",dir:o.dir||"",walk:o.walk?String(firstNum(o.walk)):"",layout:o.layout||"",src:(o.src||"ウェブ調査"),adj:""}); n++; });
       st.sa.webSources=mergeSrc(st.sa.webSources,r.sources);
