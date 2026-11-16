@@ -105,6 +105,9 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 #gate h1{color:var(--navy);margin:10px 0}
 #gate p{color:var(--sub);line-height:1.8}
 #gate .btn{display:inline-block;text-decoration:none;margin-top:8px}
+.au-log{margin-top:10px;font-size:13px;line-height:1.8}
+.au-log .ok{color:var(--teal)}.au-log .warn{color:#9a6b00}.au-log .err{color:#a1361b}
+.card.ai-auto{border:2px solid #cfe3dc;background:linear-gradient(180deg,#f7fbfa,#fff)}
 .collapse-btn{margin-left:auto;font-size:12px;border:0;background:none;color:var(--teal);cursor:pointer}
 @media (max-width:900px){
   .prop-top,.two{grid-template-columns:1fr}
@@ -955,7 +958,7 @@ const SA_DEF={ cust:"", date:"", kind:"", name:"", addr:"", station:"", walk:"",
   pStd:6, pSpeed:-4, pChal:12, round:10, ovStd:"", ovSpeed:"", ovChal:"",
   sellPrice:"std", loanRest:0, payoff:30000, survey:0, otherCost:0,
   incHazard:true, incMedia:true, maskSold:false, valid:"1ヶ月",
-  koji:"", kojiName:"", kojiYear:"", kojiAdj:0, kijun:"", kijunName:"", kijunYear:"", kijunAdj:0, rosen:"", rosenName:"", rosenAdj:0, kotei:"", idxTime:0, idxWeight:"", mochibun:"",
+  koji:"", kojiName:"", kojiYear:"", kojiAdj:0, kijun:"", kijunName:"", kijunYear:"", kijunAdj:0, rosen:"", rosenName:"", rosenAdj:0, kotei:"", idxTime:0, idxWeight:"", mochibun:"", idxMemo:"", webSources:[],
   activity:"・レインズ（指定流通機構）への登録\n・不動産ポータルサイトへの掲載\n・弊社の購入検討顧客・取引先への個別紹介\n・内見対応、販売状況の定期的なご報告" };
 const SA_EVAL_DEF=[["室内の状態（リフォーム・設備）",0,""],["日当たり・眺望・通風",0,""],["管理・建物の状態",0,""],["周辺環境・利便性",0,""],["その他の個別要因",0,""]];
 (function(){ const d=LS.get("sdesk_satei",null)||{};
@@ -1128,7 +1131,7 @@ function saPages(){
         <tr><td>相続税路線価</td><td>国税庁が毎年7月に公表。地価公示の概ね8割の水準とされるため、0.8で割り戻して比較します。</td></tr>
         <tr><td>固定資産税評価額</td><td>市区町村が3年ごとに評価。地価公示の概ね7割の水準とされるため、0.7で割り戻して比較します。</td></tr>
       </table></div>
-    <div class="sa-note">※公的価格指標は標準的な土地の価格で、個別の形状・接道・面積等により実際の価格とは差が生じます。※地点格差は担当者が査定物件と地点の条件差を補正したものです。</div>`);}
+    <div class="sa-note">※公的価格指標は標準的な土地の価格で、個別の形状・接道・面積等により実際の価格とは差が生じます。※地点格差は担当者が査定物件と地点の条件差を補正したものです。${S.idxMemo?`<br>※調査メモ：${esc(S.idxMemo)}`:""}${(S.webSources||[]).length?`<br>参照：${(S.webSources||[]).slice(0,5).map(x=>esc((x.t||x.u).slice(0,40))).join("／")}`:""}</div>`);}
   // 査定結果
   const toTsubo=y=>C.sArea?tsuboMan((K==="house"?y-C.sBv:y)/C.sArea):"―";
   const plan=(cls,nm2,sub,y)=>`<div class="sa-plan ${cls}"><div class="sa-pn">${nm2}</div><div class="sa-ps">${sub}</div><div class="sa-pv">${man(y)}<small>万円</small></div><div class="sa-pt">${unitLbl} ${toTsubo(y)}万円</div></div>`;
@@ -1284,6 +1287,18 @@ function bindSaForm(id,rerender){ $$(`#${id} [data-k]`).forEach(el=>el.addEventL
 function viewSatei(v){
   const K=saSubj().kind;
   v.innerHTML=`
+  <div class="card ai-auto"><h3>AIおまかせ査定 <span class="tag">謄本・間取図・住所から自動で下書き</span></h3>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+      <div class="f wide"><label>査定物件の住所（住居表示）</label><input id="auAddr" value="${esc(st.sa.addr||st.P.address||"")}" placeholder="例：東京都府中市押立町1丁目○-○"></div>
+      <div class="f"><label>登記簿謄本（PDF・写真）</label><input type="file" id="auToki" accept="application/pdf,image/*" multiple></div>
+      <div class="f"><label>間取図（PDF・写真／任意）</label><input type="file" id="auMadori" accept="application/pdf,image/*" multiple></div>
+      <div class="f chk"><input type="checkbox" id="auIdx" checked><label for="auIdx" style="font-size:13px">公示地価・基準地価・路線価をウェブで調べる</label></div>
+      <div class="f chk"><input type="checkbox" id="auComps" checked><label for="auComps" style="font-size:13px">近隣の成約・販売事例をウェブで調べる</label></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="auGo">AIで査定する</button><span class="muted">1〜3分ほどかかります。結果は下の各STEPに入り、手で直せます。</span></div>
+    <div id="auLog" class="au-log"></div>
+    ${(st.sa.webSources||[]).length?`<details style="margin-top:8px"><summary class="muted" style="cursor:pointer">AIが参照したウェブページ（${st.sa.webSources.length}件）</summary><div class="note">${st.sa.webSources.map(x=>`<a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t||x.u)}</a>`).join("<br>")}</div></details>`:""}
+  </div>
   <div class="card"><h3>STEP1　査定物件 <span class="tag">上の物件情報から自動入力・上書き可</span></h3>${saFormHTML("saSubj",SA_SUBJ_FIELDS())}
     <div class="row" style="margin-top:8px"><button class="btn sm ghost" id="saPhotoBtn">外観写真を追加</button>${st.saPhoto?`<button class="btn sm ghost" id="saPhotoDel">写真を削除</button>`:""}<input type="file" id="saPhotoFile" accept="image/*" class="hide"></div></div>
   <div class="card"><h3>STEP2　取引事例を集める</h3>
@@ -1314,6 +1329,7 @@ function viewSatei(v){
     <details style="margin-top:10px"><summary style="cursor:pointer;color:var(--teal);font-size:13px">売出プラン・手取り試算・掲載内容の設定</summary><div style="margin-top:10px">${saFormHTML("saPlan",SA_PLAN_FIELDS)}</div></details>
     <div class="row" style="margin-top:12px"><button class="btn" id="saDl">査定書PDFをダウンロード</button><span class="muted" id="saPages"></span></div></div>
   <div class="pv-wrap" id="saPv" style="flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:flex-start"></div>`;
+  $("#auGo").onclick=saAuto;
   bindSaForm("saSubj",true); bindSaForm("saIdx");
   $("#saIdxDrop").onclick=()=>$("#saIdxFile").click(); $("#saIdxFile").onchange=e=>{ saIdxImport([...e.target.files]); e.target.value=""; }; bindSaForm("saAdj"); bindSaForm("saPlan");
   $("#saPhotoBtn").onclick=()=>$("#saPhotoFile").click();
@@ -1374,6 +1390,88 @@ async function renderHTMLCanvas(html){
   await document.fonts.ready; await Promise.all($$("img",host).map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r})));
   const c=await html2canvas(host.firstElementChild,{scale:2,backgroundColor:"#fff",logging:false}); host.innerHTML=""; return c;
 }
+
+/* ---------- AIおまかせ査定 ---------- */
+async function aiResearch(prompt,maxUses){
+  if(MODE!=="gas") throw new Error("ウェブ調査はGitHub版（signal-office.github.io/match/desk/）で使えます");
+  return api("research",{prompt,maxUses});
+}
+function pickJSON(t,arr){ const m=String(t||"").match(arr?/\[[\s\S]*\]/:/\{[\s\S]*\}/); if(!m) return null; try{ return JSON.parse(m[0]); }catch(e){ return null; } }
+async function filesToBlobs(files,maxPages){ const out=[]; for(const f of files){ for(const c of await fileToCanvases(f,1800,maxPages)){ out.push(await new Promise(r=>c.toBlob(r,"image/jpeg",0.85))); if(out.length>=8) return out; } } return out; }
+async function saAuto(){
+  const log=$("#auLog"), btn=$("#auGo"); const line=(m,cls="")=>{ log.insertAdjacentHTML("beforeend",`<div class="${cls}">${m}</div>`); };
+  const addr=$("#auAddr").value.trim(), toki=[...$("#auToki").files], madori=[...$("#auMadori").files];
+  if(!addr&&!toki.length){ toast("住所を入れるか、謄本を選んでください"); return; }
+  btn.disabled=true; log.innerHTML=""; const doIdx=$("#auIdx").checked, doComps=$("#auComps").checked;
+  try{
+    // ① 謄本・間取図の読取
+    if(toki.length||madori.length){
+      line("① 謄本・間取図を読み取っています…");
+      const sample=await sampler(); if(!sample) throw new Error("この表示ではAIが使えません");
+      const imgs=[...(await filesToBlobs(toki,4)),...(await filesToBlobs(madori,2))].slice(0,8);
+      const r=await sample(`添付は不動産の登記簿謄本（全部事項証明書）と間取図です。査定に必要な情報だけを読み取り、JSONオブジェクト1つで出力してください（文章不要）。
+キー：kind（"mansion"=区分建物／"house"=土地＋一戸建て／"land"=土地のみ）, name（建物の名称・マンション名）, addr（所在。住居表示が分かればそれ）, chiban（地番）, landArea（土地の地積㎡ 数値。複数筆は合計）, bldgArea（建物の床面積合計㎡ 数値）, area（区分建物の専有部分の床面積㎡ 数値）, floor（区分建物の所在階 数値）, floors（建物の階数 数値）, structure（構造）, built（新築年月日を "YYYY年M月"）, layout（間取図から 例 3LDK）, mochibun（敷地権の割合から計算した敷地持分㎡ 数値。計算できなければ ""）, rights（所有権など）, owner（現在の所有者の氏名）, note（地目・用途・抵当権の有無など査定上の注意点を80字以内）。
+読めない・記載のない項目は ""。推測しない。和暦は西暦に直す。`,{images:imgs});
+      const o=pickJSON(r.text)||{}; let n=0;
+      ["kind","name","addr","structure","built","layout","rights","note"].forEach(k=>{ if(o[k]){ st.sa[k]=String(o[k]); n++; } });
+      ["landArea","bldgArea","area","floor","floors","mochibun"].forEach(k=>{ if(num(o[k])){ st.sa[k]=String(num(o[k])); n++; } });
+      if(o.chiban) st.P.chiban=String(o.chiban);
+      if(o.owner&&!st.sa.cust) st.sa.cust=String(o.owner);
+      if(o.kind==="mansion"&&num(o.area)) st.sa.note=[st.sa.note,"専有面積は登記（内法）面積"].filter(Boolean).join("／");
+      line(`　→ ${n}項目を読み取りました`,"ok");
+    }
+    if(addr) st.sa.addr=addr;
+    const S=saSubj(); const where=S.addr||addr;
+    if(!where) throw new Error("住所が分かりません。住所を入力してください");
+    const kindJ={mansion:"中古マンション",house:"中古戸建",land:"土地"}[S.kind]||"不動産";
+    // ② 公的価格指標
+    if(doIdx){
+      line("② 公示地価・基準地価・路線価を調べています…（30秒〜1分）");
+      const r=await aiResearch(`日本の不動産査定のために、次の住所の公的な土地価格の指標をウェブで調べてください。
+住所：${where}（${kindJ}）
+調べるもの：
+1. 地価公示（国土交通省）：この住所に最も近い標準地を最大2地点。最新年のもの。
+2. 都道府県地価調査（基準地価）：最も近い基準地を最大2地点。最新年のもの。
+3. 相続税路線価（国税庁）：この住所の前面道路の路線価（千円/㎡）。特定できなければ value は "" にし、周辺の路線価の水準を note に書く。
+4. 用途地域・建ぺい率・容積率（分かれば）。
+最後に、次の形のJSONオブジェクトだけを出力（前後に文章を付けない）：
+{"koji":[{"name":"標準地番号（例 府中-12）","addr":"所在","price":円/㎡の数値,"year":"価格時点","near":"査定地との位置関係（例 同じ町内・約300m）"}],"kijun":[同じ形],"rosen":{"value":千円/㎡の数値または"","year":"年分","note":""},"zoning":"","memo":"補足"}
+確認できない値は "" とし、推測で埋めない。`,6);
+      const o=pickJSON(r.text)||{};
+      const k=(o.koji||[]).filter(x=>num(x.price))[0], j=(o.kijun||[]).filter(x=>num(x.price))[0];
+      if(k){ st.sa.koji=String(num(k.price)); st.sa.kojiName=[k.name,k.addr,k.near&&`（${k.near}）`].filter(Boolean).join(" "); st.sa.kojiYear=k.year||""; }
+      if(j){ st.sa.kijun=String(num(j.price)); st.sa.kijunName=[j.name,j.addr,j.near&&`（${j.near}）`].filter(Boolean).join(" "); st.sa.kijunYear=j.year||""; }
+      if(o.rosen&&num(o.rosen.value)){ st.sa.rosen=String(num(o.rosen.value)); st.sa.rosenName=[o.rosen.year,o.rosen.note].filter(Boolean).join(" "); }
+      if(o.zoning&&!st.sa.zoning) st.sa.zoning=String(o.zoning);
+      st.sa.idxMemo=[o.memo,o.rosen&&!num(o.rosen.value)&&o.rosen.note?`路線価：${o.rosen.note}`:""].filter(Boolean).join("／");
+      st.sa.webSources=mergeSrc(st.sa.webSources,r.sources);
+      line(`　→ 公示地価 ${k?comma(num(k.price))+"円/㎡":"見つからず"}／基準地価 ${j?comma(num(j.price))+"円/㎡":"見つからず"}／路線価 ${st.sa.rosen?st.sa.rosen+"千円/㎡":"特定できず"}`,k||j?"ok":"warn");
+    }
+    // ③ 近隣事例
+    if(doComps){
+      line("③ 近隣の成約・販売事例を調べています…（30秒〜1分）");
+      const spec=[S.kind==="mansion"?(S.name&&`マンション名 ${S.name}`):"",S.kind==="mansion"?(S.area&&`専有${S.area}㎡`):(S.landArea&&`土地${S.landArea}㎡`),S.kind==="house"&&S.bldgArea?`建物${S.bldgArea}㎡`:"",S.built&&`築${S.built}`,S.layout,S.floor&&`${S.floor}階`].filter(Boolean).join("、");
+      const r=await aiResearch(`日本の不動産査定のために、次の物件と条件の近い取引事例をウェブで集めてください。
+査定物件：${where}／${kindJ}／${spec}
+集める事例（合計10件まで、近い順・新しい順）：
+・国土交通省「不動産情報ライブラリ」の成約価格（取引価格）情報：同じ町・隣接町・同じ駅圏の同種別
+・現在販売中または最近の販売事例（SUUMO・アットホーム・LIFULL HOME'S・ノムコムなど）：同じ町・隣接町・同じ駅圏の同種別
+${S.kind==="mansion"?"・同じマンション内の事例があれば最優先":""}
+最後に、次の形のJSON配列だけを出力（前後に文章を付けない）：
+[{"kind":"成約"または"売出","date":"YYYY-MM（成約時期・掲載時期）","name":"物件名（なければ\"\"）","addr":"所在","price":価格（万円の数値）,"area":${S.kind==="mansion"?"専有面積㎡":"土地面積㎡"}の数値,"barea":建物面積㎡（戸建のみ、なければ""）,"built":"YYYY-MM","floor":所在階,"dir":"向き","walk":駅徒歩分の数値,"layout":"間取り","src":"情報源のサイト名"}]
+確認できない値は "" とし、推測で埋めない。価格と面積が分からない事例は入れない。`,6);
+      const arr=pickJSON(r.text,true)||[]; let n=0;
+      arr.forEach(o=>{ if(!num(o.price)||!firstNum(o.area)) return; st.saCases.push({on:true,kind:o.kind==="成約"?"成約":"売出",date:o.date||"",name:o.name||"",addr:o.addr||"",price:String(num(o.price)),area:String(firstNum(o.area)),barea:o.barea?String(firstNum(o.barea)):"",built:o.built||"",floor:o.floor?String(firstNum(o.floor)):"",dir:o.dir||"",walk:o.walk?String(firstNum(o.walk)):"",layout:o.layout||"",src:(o.src||"ウェブ調査"),adj:""}); n++; });
+      st.sa.webSources=mergeSrc(st.sa.webSources,r.sources);
+      line(`　→ ${n}件の事例を追加しました`,n?"ok":"warn");
+    }
+    saSave(); const C=saCalc();
+    line(C.seiyaku?`<b>完了：成約想定価格 ${man(C.seiyaku)}万円（スタンダード ${man(C.plans.std)}万円）</b>　内容を確認して、地点格差・個別評価・不要な事例のチェックを調整してください。`:"完了：面積や事例が足りないため、まだ価格が出せません。下の各STEPを確認してください。",C.seiyaku?"ok":"warn");
+    const keep=log.innerHTML; viewSatei($("#view")); $("#auLog").innerHTML=keep;
+  }catch(e){ line("エラー："+esc(e.message||e),"err"); }
+  finally{ const b=$("#auGo"); if(b) b.disabled=false; }
+}
+function mergeSrc(a,b){ const m=new Map(); [...(a||[]),...(b||[])].forEach(x=>{ if(x&&x.u&&!m.has(x.u)) m.set(x.u,x); }); return [...m.values()].slice(0,40); }
 
 /* 事例の取込：AI読取 */
 async function saImport(files){
