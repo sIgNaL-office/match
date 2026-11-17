@@ -1005,6 +1005,14 @@ function tabInfo(){
   if (xbtn) bindRunX(kind, d.rec.id);
 }
 
+// 取引先に登録のない会社で、過去に似た案件を紹介したところ（回答の記録で手入力したもの）
+function offHtml(d){
+  const xs = d.offCands || []; if (!xs.length) return '';
+  return `<h2 style="margin-top:18px">取引先に登録のない会社（過去に似た案件を紹介）</h2><p class="sub">回答の記録で手入力した会社のうち、これまでに似た案件を紹介していたところです。</p>
+    <div class="cands">${xs.map((o, i) => `<div class="cand" style="grid-template-columns:1fr auto"><div style="min-width:0"><b>${esc(o.name)}</b><span class="chip">登録外</span>${o.person ? `<span class="m" style="margin-left:6px">${esc(o.person)}</span>` : ''}
+      ${o.past.map(p => `<div class="why">${esc(p.at)}に「${esc(p.title)}」（${esc(p.sum)}）を紹介 → <b>${esc(p.result)}</b>${p.amount ? '・' + esc(p.amount) : ''}${p.reason ? '・' + esc(p.reason) : ''}<span class="m">（${esc(p.why)}）</span></div>`).join('')}</div>
+      <div class="score">似ている度 ${o.score}<div class="bar"><i style="width:${o.score}%"></i></div><div class="row" style="gap:6px;margin-top:6px;justify-content:flex-end"><button class="btn ghost sm" data-ointro="${i}">紹介した</button><button class="btn ghost sm" data-onote="${i}">詳しく記録</button></div></div></div>`).join('')}</div>`;
+}
 // 他の営業の取引先・買ニーズで、この物件に合うもの（社内マッチ）。非公開のものは概要だけ
 function xcHtml(d){
   const xs = d.xcands || []; if (!xs.length) return '';
@@ -1026,9 +1034,10 @@ function tabCands(){
       <div class="cands">${m.candidates.length ? m.candidates.map((c, i) => `<div class="cand"><span class="n">${i + 1}</span>
         <div style="min-width:0"><a data-buyer="${esc(c.id)}">${esc(c.name)}</a>${answered[c.id] ? `<span class="chip">${esc(answered[c.id])}</span>` : ''}<div class="why">${esc(c.reason)}</div></div>
         <div class="score">適合度 ${c.score}<div class="bar"><i style="width:${c.score}%"></i></div>${answered[c.id] ? '' : `<button class="btn ghost sm" data-intro="${esc(c.id)}">紹介した</button>`}</div></div>`).join('') : '<div class="empty">合いそうな取引先は見つかりませんでした。</div>'}</div>
+      ${offHtml(d)}
       ${xcHtml(d)}
       ${m.needs.length ? `<h2 style="margin-top:18px">条件が合いそうな買ニーズ</h2><div class="cands">${m.needs.map(n => `<div class="cand" style="grid-template-columns:1fr"><div><a data-need="${esc(n.id)}">${esc(n.name)}</a><div class="why">${esc(n.reason)}</div></div></div>`).join('')}</div>` : ''}`
-    : '<div class="empty">まだ選定していません。「AIで紹介先を選ぶ」を押してください（30秒ほどかかります）。</div>' + xcHtml(d)}`;
+    : '<div class="empty">まだ選定していません。「AIで紹介先を選ぶ」を押してください（30秒ほどかかります）。</div>' + offHtml(d) + xcHtml(d)}`;
   $('#runm').onclick = async e => { const b = e.currentTarget; busy(b, true, '選定中…'); try { d.match = await api('match', { id: r.id }); tabCands(); } catch (err) { toast(err.message, 6000); busy(b, false); } };
   // 新しく登録した案件は、開いたらすぐAIで紹介先を選ぶ
   if (S.autoMatch === r.id && !m) { S.autoMatch = ''; toast('登録しました。AIが紹介先の候補を選んでいます（30秒ほど）'); $('#runm').click(); xBg('deal', r.id); }
@@ -1038,6 +1047,13 @@ function tabCands(){
   const sr = $('#setr'); if (sr) sr.onclick = async () => { try { const x = await api('setRank', { id: r.id, rank: m.rank }); d.rec = x.rec; await refresh(); drawDetail(); toast('ランクを ' + m.rank + ' にしました'); } catch (err) { toast(err.message, 6000); } };
   document.querySelectorAll('[data-intro]').forEach(b => b.onclick = async () => { busy(b, true, '記録中…'); try { const x = await api('addResponse', { dealId: r.id, buyerId: b.dataset.intro, result: S.results[0] }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabCands(); toast('紹介済みとして記録しました'); } catch (err) { toast(err.message, 6000); busy(b, false); } });
   document.querySelectorAll('[data-buyer]').forEach(a => a.onclick = () => go('detail', { dkind: 'buyer', did: a.dataset.buyer, dtab: 'info' }));
+  // 登録外の会社：「紹介した」でそのまま記録、「詳しく記録」で回答の記録へ
+  document.querySelectorAll('[data-ointro]').forEach(b => b.onclick = async () => {
+    const o = (d.offCands || [])[+b.dataset.ointro]; busy(b, true, '記録中…');
+    try { const x = await api('addResponse', { dealId: r.id, buyerName: o.name, person: o.person, result: S.results[0] }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; d.offCands = d.offCands.filter(c => c !== o); tabCands(); toast('紹介済みとして記録しました'); }
+    catch (err) { toast(err.message, 6000); busy(b, false); }
+  });
+  document.querySelectorAll('[data-onote]').forEach(b => b.onclick = () => { const o = (d.offCands || [])[+b.dataset.onote]; S.freePrefill = { name: o.name, person: o.person }; S.dtab = 'resp'; drawDetail(); });
   document.querySelectorAll('[data-need]').forEach(a => a.onclick = () => go('detail', { dkind: 'need', did: a.dataset.need, dtab: 'info' }));
 }
 
@@ -1077,6 +1093,7 @@ function tabResp(){
   $('#dbody').innerHTML = `<p class="sub">紹介先からの回答を記録します。ここに溜まった買付金額や見送り理由が、次からの紹介先の選定に使われます。</p>
     <div class="panel"><div class="grid">
       <div class="f"><label for="r-q">紹介先</label><input id="r-q" type="search" placeholder="会社名で探す（一部だけでも可）" autocomplete="off" style="margin-bottom:6px"><select id="r-b"></select></div>
+      <div class="f" id="r-free" hidden><label for="r-n">会社名（取引先に登録のない会社）</label><input id="r-n" placeholder="例：○○不動産株式会社" style="margin-bottom:6px"><input id="r-p" placeholder="先方の担当者（任意）例：仕入部 山田様"><div class="why" style="margin-top:4px">記録すると、次に似た案件が出たとき「紹介先の候補」に出ます。</div></div>
       <div class="f"><label for="r-r">回答</label><select id="r-r">${S.results.map(x => `<option>${esc(x)}</option>`).join('')}</select></div>
       <div class="f"><label for="r-a">買付・仕入金額</label><input id="r-a" placeholder="例：8,500万円"></div>
       <div class="f"><label for="r-w">見送り理由・メモ</label><input id="r-w" placeholder="例：容積が足りない、価格が合わない"></div>
@@ -1086,20 +1103,28 @@ function tabResp(){
         <td><select id="e-r">${S.results.map(o => `<option${o === x.result ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></td><td>${esc(x.answerAt || '')}</td>
         <td><input id="e-a" value="${esc(x.amount)}" placeholder="例：8,500万円"></td><td><textarea id="e-w" rows="2">${esc(x.reason)}</textarea></td>
         <td style="white-space:nowrap"><button class="btn sm" id="e-save">保存</button> <button class="btn ghost sm" id="e-cancel">やめる</button></td></tr>`
-      : `<tr><td>${esc(x.at)}</td><td>${esc(x.buyerName)}</td><td>${esc(x.result)}</td><td>${esc(x.answerAt || '')}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}${histHtml(x)}</td>
-        <td>${x.buyerId ? `<button class="btn ghost sm" data-redit="${esc(x.id)}">更新</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted)">まだ回答はありません</td></tr>'}</table></div>`;
+      : `<tr><td>${esc(x.at)}</td><td>${esc(x.buyerName)}${x.free && x.mine ? '<span class="chip">登録外</span>' : ''}${x.person ? `<div class="why">${esc(x.person)}</div>` : ''}</td><td>${esc(x.result)}</td><td>${esc(x.answerAt || '')}</td><td>${esc(x.amount)}</td><td>${esc(x.reason)}${histHtml(x)}</td>
+        <td>${x.buyerId || (x.free && x.mine) ? `<button class="btn ghost sm" data-redit="${esc(x.id)}">更新</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7" style="color:var(--muted)">まだ回答はありません</td></tr>'}</table></div>`;
   // 会社名の一部で候補を絞る（株式会社・(株)・全角半角・大文字小文字の違いは無視）
   const nz = t => String(t || '').normalize('NFKC').replace(/株式会社|\(株\)|有限会社|\s/g, '').replace(/[ぁ-ゖ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60)).toLowerCase();
   const fill = () => {
     const q = nz($('#r-q').value), hit = q ? opts.filter(o => nz(o.name).indexOf(q) >= 0) : opts;
-    $('#r-b').innerHTML = `<option value="">${q ? (hit.length ? hit.length + '件見つかりました。選んでください' : '見つかりません') : '選択してください'}</option>` + hit.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('');
+    $('#r-b').innerHTML = `<option value="">${q ? (hit.length ? hit.length + '件見つかりました。選んでください' : '取引先に見つかりません。下の「手入力」を選んでください') : '選択してください'}</option>` + hit.map(o => `<option value="${esc(o.id)}">${esc(o.name)}</option>`).join('')
+      + `<option value="__free">＋ 取引先に登録のない会社（手入力）${q && !hit.length ? '：' + esc($('#r-q').value.trim()) : ''}</option>`;
     if (q && hit.length === 1) $('#r-b').value = hit[0].id;
+    if (q && !hit.length) $('#r-b').value = '__free';
+    syncFree();
   };
+  const syncFree = () => { const on = $('#r-b').value === '__free'; $('#r-free').hidden = !on; if (on && !$('#r-n').value) $('#r-n').value = $('#r-q').value.trim(); };
+  $('#r-b').onchange = syncFree;
   $('#r-q').oninput = fill; fill();
+  if (S.freePrefill) { $('#r-b').value = '__free'; syncFree(); $('#r-n').value = S.freePrefill.name; $('#r-p').value = S.freePrefill.person || ''; S.freePrefill = null; }
   $('#r-add').onclick = async e => {
+    const free = $('#r-b').value === '__free';
     if (!$('#r-b').value) { toast('紹介先を選んでください'); return; }
+    if (free && !$('#r-n').value.trim()) { toast('会社名を入力してください'); return; }
     const b = e.currentTarget; busy(b, true, '記録中…');
-    try { const x = await api('addResponse', { dealId: r.id, buyerId: $('#r-b').value, result: $('#r-r').value, amount: $('#r-a').value, reason: $('#r-w').value }); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabResp(); toast(x.updated ? 'この取引先の記録がすでにあったので、その記録を更新しました' : '記録しました', 4000); }
+    try { const x = await api('addResponse', Object.assign({ dealId: r.id, result: $('#r-r').value, amount: $('#r-a').value, reason: $('#r-w').value }, free ? { buyerName: $('#r-n').value, person: $('#r-p').value } : { buyerId: $('#r-b').value })); d.responses = x.responses; S.respCount[r.id] = x.responses.length; tabResp(); toast(x.updated ? 'この紹介先の記録がすでにあったので、その記録を更新しました' : '記録しました', 4000); }
     catch (err) { toast(err.message, 6000); busy(b, false); }
   };
   // 記録済みの回答を更新（回答・金額・理由メモ）
