@@ -266,6 +266,19 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 .bb-x{border:0;background:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;color:#6b7a80;font-size:15px;line-height:24px;flex:none}
 .bb-reset{align-self:flex-start}
 @media (max-width:700px){.bb-top,.bb-opt{grid-template-columns:1fr}.bb-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}
+.sheet.in .pl-head h1{font-size:26px}
+.in-sec{font-size:13px;font-weight:700;color:#2b3864;margin-top:16px;display:flex;align-items:baseline;gap:10px}.in-sec small{font-size:10.5px;font-weight:500;color:#6b7a80}
+.in-bar{display:flex;height:16px;border-radius:8px;overflow:hidden;margin-top:7px;background:#eef2f2}
+.in-lg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:10px;color:#4a585e;margin-top:6px}.in-lg span{display:flex;align-items:center;gap:5px}.in-lg i{width:10px;height:10px;border-radius:3px;display:inline-block}.in-lg b{color:#2b3864;margin-left:2px}
+.in-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-top:12px;align-items:start}
+.in-g{border:1px solid #dfe7e8;border-radius:10px;padding:8px 12px}
+.in-gh{display:flex;justify-content:space-between;align-items:baseline;border-left:4px solid;padding-left:8px;margin-bottom:4px}.in-gh span{font-size:11.5px;font-weight:700;color:#2b3864}.in-gh b{font-size:14px;color:#2b3864;font-variant-numeric:tabular-nums}.in-gh small,.in-ra small{font-size:9.5px;font-weight:500;margin-left:2px}
+.in-r{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px dashed #e3e9ea;gap:10px}
+.in-rl{font-size:11.5px;color:#1b2328}.in-rn{font-size:9px;color:#6b7a80;margin-top:1px}
+.in-ra{font-size:13px;font-weight:700;color:#1d2a4d;font-variant-numeric:tabular-nums;white-space:nowrap}
+.in-total{margin-top:12px;background:linear-gradient(90deg,#2b3864,#367069);color:#fff;border-radius:12px;padding:12px 20px;display:flex;justify-content:space-between;align-items:center}
+.in-total span{font-size:14px;font-weight:700;letter-spacing:.15em}.in-total b{font-size:28px;font-weight:900;font-variant-numeric:tabular-nums}.in-total small{font-size:13px;margin-left:4px;font-weight:500}
+.in-free{font-size:10.5px;color:#367069;font-weight:700;margin-top:6px}
 .f.fsec{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--teal,#367069);border-bottom:1px solid #dfe7e8;padding:8px 0 3px;margin-top:2px}
 .sheet .ln-bar{height:7px;background:#eef2f2;border-radius:4px;overflow:hidden}.sheet .ln-bar i{display:block;height:100%;background:linear-gradient(90deg,#2b3864,#367069)}
 /* 資金計画書 v2 */
@@ -752,46 +765,60 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
     let rows=[]; let prorate=0, days=0, dim=30, md="";
     if(v.moveIn){ const d=new Date(v.moveIn+"T00:00:00"); if(!isNaN(d)){ dim=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(); days=dim-d.getDate()+1; prorate=Math.round(m*days/dim); md=`${d.getMonth()+1}/${d.getDate()}〜${d.getMonth()+1}/${dim}`; } }
     const fr=num(v.freeRent);
-    rows.push(["敷金",rent*num(v.deposit),`賃料×${num(v.deposit)}ヶ月`]);
-    rows.push(["礼金",Math.round(rent*num(v.keyMoney)*1.0),`賃料×${num(v.keyMoney)}ヶ月`]);
-    rows.push(["日割家賃・管理費",fr?0:prorate, md?`${md}（${days}日分）`:""]);
-    if(v.nextMonth) rows.push(["翌月分家賃・管理費",fr>=1?0:m,"前家賃1ヶ月分"]);
-    rows.push(["仲介手数料",Math.round(rent*num(v.brokerM)*1.1),`賃料×${num(v.brokerM)}ヶ月＋消費税`]);
-    rows.push(["保証会社 初回保証料",Math.round(m*num(v.guarPct)/100),`月額総賃料×${num(v.guarPct)}%`+(st.P.guarantee?`（${st.P.guarantee}）`:"")]);
-    rows.push(["火災保険料",num(v.insurance),"2年契約目安"]);
-    rows.push(["鍵交換費",num(v.keyChange),""]);
-    if(v.other1n&&num(v.other1)) rows.push([v.other1n,num(v.other1),""]);
-    if(v.other2n&&num(v.other2)) rows.push([v.other2n,num(v.other2),""]);
+    rows.push(["敷金",rent*num(v.deposit),`賃料×${num(v.deposit)}ヶ月（退去時に精算）`,"dep"]);
+    rows.push(["礼金",Math.round(rent*num(v.keyMoney)),`賃料×${num(v.keyMoney)}ヶ月`,"fee"]);
+    rows.push(["日割家賃・管理費",fr?0:prorate, md?`${md}（${days}日分）`:"","rent"]);
+    if(v.nextMonth) rows.push(["翌月分家賃・管理費",fr>=1?0:m,"前家賃1ヶ月分","rent"]);
+    rows.push(["仲介手数料",Math.round(rent*num(v.brokerM)*1.1),`賃料×${num(v.brokerM)}ヶ月＋消費税`,"fee"]);
+    rows.push(["保証会社 初回保証料",Math.round(m*num(v.guarPct)/100),`月額総賃料×${num(v.guarPct)}%`+(st.P.guarantee?`（${st.P.guarantee}）`:""),"etc"]);
+    rows.push(["火災保険料",num(v.insurance),"2年契約目安","etc"]);
+    rows.push(["鍵交換費",num(v.keyChange),"","etc"]);
+    if(v.other1n&&num(v.other1)) rows.push([v.other1n,num(v.other1),"","etc"]);
+    if(v.other2n&&num(v.other2)) rows.push([v.other2n,num(v.other2),"","etc"]);
     rows=rows.filter(r=>r[1]||/敷金|礼金|仲介/.test(r[0]));
-    return {rows,total:rows.reduce((a,r)=>a+r[1],0),m};
+    const sum=k=>rows.filter(r=>r[3]===k).reduce((a,r)=>a+r[1],0);
+    return {rows,total:rows.reduce((a,r)=>a+r[1],0),m,rent,cm,cats:{rent:sum("rent"),dep:sum("dep"),fee:sum("fee"),etc:sum("etc")},days,md};
   },
   render(v){
-    const c=this.calc(v), s=staff(num(v.staff));
-    return `<div class="sheet">
-      <div style="display:flex;justify-content:space-between;align-items:flex-end">
-        <h1>初期費用計算書</h1>
-        <div style="font-size:20px;font-weight:700;min-width:180px;border-bottom:1px solid #333;text-align:right">${esc(v.cust||"　")}　様</div>
+    const c=this.calc(v), s=staff(num(v.staff)), P=st.P;
+    const CAT=[["rent","家賃（日割・前家賃）","#2b3864"],["fee","礼金・仲介手数料","#367069"],["etc","保証・保険・鍵交換など","#5fa877"],["dep","敷金（お預け金）","#b9cfc6"]];
+    const pct=x=>c.total?Math.max(0,x/c.total*100):0;
+    const groups=[["rent","家賃・管理費"],["dep","お預けするお金"],["fee","契約にかかる費用"],["etc","保証・保険・その他"]];
+    const mv=v.moveIn?jDate(v.moveIn,true):"—";
+    const ratio=c.m?(c.total/c.m):0;
+    return `<div class="sheet pl in">
+      <div class="pl-top"></div>
+      <div class="pl-head">
+        <div><div class="pl-eyebrow">MOVE-IN COST ESTIMATE</div><h1>初期費用計算書 <span class="pl-chip">賃貸</span></h1></div>
+        <div style="text-align:right"><div class="pl-cust">${esc(v.cust||"　　　　")}<small>様</small></div><div class="pl-date">作成日 ${jDate(v.date)}</div></div>
       </div>
-      <div style="text-align:right;font-size:11px;margin-top:4px">作成日：${jDate(v.date)}</div>
-      <table class="doc-tbl" style="margin-top:14px">
-        <tr><th>物件名</th><td colspan="3"><b style="font-size:15px">${esc(st.P.name||"")}</b></td></tr>
-        <tr><th>所在地</th><td colspan="3">${esc(st.P.address||"")}</td></tr>
-        <tr><th>間取り／面積</th><td>${esc([st.P.layout,st.P.bldgArea].filter(Boolean).join("／"))}</td><th style="width:110px">契約開始日</th><td>${jDate(v.moveIn,true)}</td></tr>
-        <tr><th>賃料</th><td class="yen">${yen(num(v.rent))}</td><th>管理費等</th><td class="yen">${yen(num(v.common))}</td></tr>
-        <tr><th>月額合計</th><td colspan="3" class="yen" style="font-size:15px">${yen(c.m)}</td></tr>
-      </table>
-      <div class="bx">
-        <b>◆ご契約時 初期費用明細◆</b>
-        <table class="cost" style="margin-top:8px">
-          ${c.rows.map((r,i)=>`<tr><td class="lbl">${esc(r[0])}</td><td class="dots">・・・・・・</td><td class="yaku"></td><td class="amt k">${yen(r[1])}</td><td class="nt">${esc(r[2])}</td></tr>`).join("")}
-        </table>
-        <div style="border-top:1.5px solid #9aa4a8;margin:12px -18px 0;padding:12px 18px 0;display:flex;align-items:center;gap:16px">
-          <b style="width:190px">初期費用合計</b><span style="color:#888;letter-spacing:.2em">・・・・・・</span>
-          <span class="hl" style="flex:1;text-align:center;font-size:22px;font-weight:900">${yen(c.total)}</span>
-        </div>
-        ${num(v.freeRent)?`<div style="margin-top:6px;font-size:11px">※フリーレント${num(v.freeRent)}ヶ月適用で試算</div>`:""}
+      <div class="pl-prop">
+        <div style="flex:1"><div class="pl-kl">物件</div><div class="pl-pn">${esc(P.name||"　")}</div><div class="pl-pa">${esc(P.address||"")}</div>
+          <div class="pl-pa">${esc([P.layout,P.bldgArea,P.access].filter(Boolean).join("　／　"))}</div></div>
+        <div class="pl-price"><div style="font-size:11px;opacity:.85">ご契約時のお支払い（概算）</div><div>${comma(c.total)}<small>円</small></div></div>
       </div>
-      <div style="margin-top:14px;font-size:11px;line-height:1.8">${nl2br(v.memo)}</div>
+      <div class="pl-kpis" style="grid-template-columns:repeat(4,1fr)">
+        <div class="pl-kpi"><div class="pl-kl">賃料</div><div class="pl-kv">${comma(c.rent)}<small>円</small></div></div>
+        <div class="pl-kpi"><div class="pl-kl">管理費・共益費</div><div class="pl-kv">${comma(c.cm)}<small>円</small></div></div>
+        <div class="pl-kpi acc"><div class="pl-kl">毎月のお支払い</div><div class="pl-kv">${comma(c.m)}<small>円</small></div></div>
+        <div class="pl-kpi"><div class="pl-kl">ご入居日</div><div class="pl-kv" style="font-size:14px;white-space:nowrap">${esc(mv)}</div></div>
+      </div>
+      <div class="in-sec">初期費用の内訳<small>合計 ${comma(c.total)}円${ratio?`（月額の約${ratio.toFixed(1)}ヶ月分）`:""}</small></div>
+      <div class="in-bar">${CAT.map(([k,,col])=>c.cats[k]?`<div style="width:${pct(c.cats[k]).toFixed(2)}%;background:${col}"></div>`:"").join("")}</div>
+      <div class="in-lg">${CAT.map(([k,l,col])=>`<span><i style="background:${col}"></i>${l}<b>${comma(c.cats[k])}円</b></span>`).join("")}</div>
+      <div class="in-grid">
+        ${groups.map(([k,l])=>{ const rs=c.rows.filter(r=>r[3]===k); if(!rs.length) return ""; const col=CAT.find(x=>x[0]===k)[2];
+          return `<div class="in-g"><div class="in-gh" style="border-color:${col}"><span>${l}</span><b>${comma(c.cats[k])}<small>円</small></b></div>
+            ${rs.map(r=>`<div class="in-r"><div><div class="in-rl">${esc(r[0])}</div>${r[2]?`<div class="in-rn">${esc(r[2])}</div>`:""}</div><div class="in-ra">${comma(r[1])}<small>円</small></div></div>`).join("")}</div>`; }).join("")}
+      </div>
+      <div class="in-total"><span>初期費用 合計</span><b>${comma(c.total)}<small>円</small></b></div>
+      ${num(v.freeRent)?`<div class="in-free">フリーレント ${num(v.freeRent)}ヶ月 適用で試算しています</div>`:""}
+      <div class="pl-steps" style="margin-top:12px">
+        <div class="pl-step"><div class="pl-sn">1</div><div class="pl-st">お申込み・入居審査</div><div class="pl-sa" style="font-size:13px">審査結果のご連絡</div><div class="pl-sd">保証会社・貸主による審査があります</div></div>
+        <div class="pl-step"><div class="pl-sn">2</div><div class="pl-st">ご契約時</div><div class="pl-sa">${comma(c.total)}<small style="font-size:10px">円</small></div><div class="pl-sd">上記の初期費用をお支払いいただきます</div></div>
+        <div class="pl-step"><div class="pl-sn">3</div><div class="pl-st">ご入居（${esc(mv)}）以降</div><div class="pl-sa">毎月 ${comma(c.m)}<small style="font-size:10px">円</small></div><div class="pl-sd">賃料・管理費等（${v.nextMonth?"翌月分まで初期費用に含みます":"支払日は契約書をご確認ください"}）</div></div>
+      </div>
+      <div class="pl-note">${nl2br(v.memo)}${v.memo?"<br>":""}※敷金は退去時に原状回復費用等を差し引いて精算されます。保証料・保険料・鍵交換費は会社・プランにより異なります。</div>
       ${footer(s)}
     </div>`;
   }
