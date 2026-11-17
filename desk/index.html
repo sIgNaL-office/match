@@ -257,6 +257,15 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 #toolUp{position:fixed;right:16px;bottom:18px;z-index:50;border:0;border-radius:999px;background:#2b3864;color:#fff;font-weight:700;font-size:13px;padding:11px 16px;box-shadow:0 4px 14px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:.2s;font-family:inherit}
 #toolUp.show{opacity:1;pointer-events:auto}
 @media (max-width:700px){.tn-list{display:flex;overflow-x:auto;gap:6px;padding-bottom:2px;scrollbar-width:none}.tn-list::-webkit-scrollbar{display:none}.tn-list button{flex:none;padding:7px 10px;font-size:12.5px}.tn-list button span{width:22px;height:22px;font-size:12px}.tn-h{display:none}.tool-nav{padding:6px 0}}
+.bb-top{display:grid;grid-template-columns:1.2fr 1fr;gap:14px;align-items:start}
+.bb-opt{display:grid;grid-template-columns:1fr 1fr;gap:10px}.bb-opt .row{grid-column:1/-1}
+.bb-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:10px}
+.bb-item{align-self:start;background:#e6eaec;border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.bb-item canvas{width:100%;height:auto}
+.bb-h{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#2b3864}.bb-h span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bb-x{border:0;background:#fff;border-radius:50%;width:24px;height:24px;cursor:pointer;color:#6b7a80;font-size:15px;line-height:24px;flex:none}
+.bb-reset{align-self:flex-start}
+@media (max-width:700px){.bb-top,.bb-opt{grid-template-columns:1fr}.bb-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}}
 .f.fsec{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--teal,#367069);border-bottom:1px solid #dfe7e8;padding:8px 0 3px;margin-top:2px}
 .sheet .ln-bar{height:7px;background:#eef2f2;border-radius:4px;overflow:hidden}.sheet .ln-bar i{display:block;height:100%;background:linear-gradient(90deg,#2b3864,#367069)}
 /* 資金計画書 v2 */
@@ -377,9 +386,9 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
         <div class="drop" id="drop">
           <div style="font-size:26px">📄</div>
           <div><b>マイソクをドロップ</b> または クリックして選択</div>
-          <div class="muted">PDF / JPG / PNG</div>
+          <div class="muted">PDF / JPG / PNG（複数選ぶと「まとめて帯替え」へ）</div>
         </div>
-        <input type="file" id="file" accept="application/pdf,image/*" class="hide">
+        <input type="file" id="file" accept="application/pdf,image/*" multiple class="hide">
         <img id="thumb" class="thumb hide" alt="">
         <div id="pagePick" class="pp"></div>
         <div class="status" id="readStatus"></div>
@@ -485,7 +494,7 @@ function getLogoImage(){ return new Promise(res=>{
 }
 
 /* ================= state ================= */
-const st={ mode:"sale", tab:"band", P:{}, docs:{}, touched:{}, pages:[], sel:0, file:null, fileName:"", hazImg:null, propOpen:true };
+const st={ mode:"sale", tab:"band", P:{}, docs:{}, touched:{}, pages:[], sel:0, file:null, fileName:"", hazImg:null, propOpen:true, batch:[] };
 
 /* 物件情報フィールド */
 const PF_COMMON=[
@@ -1896,25 +1905,40 @@ function viewBand(v){
       <div class="status" id="bandStatus"></div>
     </div></div>
     <div class="pv-wrap" id="bandPv"><div class="note" style="padding:40px">上の「① 販売図面」からマイソクを読み込むと、ここにプレビューが出ます。</div></div>
+  </div>
+  <div class="card" id="bbCard" style="margin-top:16px"><h3>まとめて帯替え <span class="tag">複数の販売図面を一気に</span></h3>
+    <div class="bb-top">
+      <div class="drop" id="bbDrop"><div style="font-size:24px">🗂️</div><div><b>販売図面をまとめてドロップ</b> または クリックして選択</div><div class="muted">PDF・画像を複数選択できます（最大30ファイル）</div></div>
+      <input type="file" id="bbFile" accept="application/pdf,image/*" multiple class="hide">
+      <div class="bb-opt">
+        <div class="f"><label>対象ページ</label><select id="bbPages"><option value="all">全ページ</option><option value="first">各ファイルの1ページ目のみ</option></select></div>
+        <div class="f"><label>保存のしかた</label><select id="bbOut"><option value="one">1つのPDFにまとめる</option><option value="each">ファイルごとに別のPDF</option></select></div>
+        <div class="row"><button class="btn" id="bbDl" disabled>まとめて帯替えPDFを保存</button><button class="btn sm ghost" id="bbClear">クリア</button></div>
+      </div>
+    </div>
+    <p class="note">帯の位置・高さ・取引態様・担当は上の設定がすべての図面に使われます。1枚だけ帯の位置がずれる場合は、その図面のプレビューで元の帯の位置をタップすると、その図面だけ移動します。</p>
+    <div class="status" id="bbStatus"></div>
+    <div id="bbList" class="bb-list"></div>
   </div>`;
-  $$("#bandForm [data-b]").forEach(el=>{ el.value=SET[el.dataset.b]; el.addEventListener("input",()=>{ SET[el.dataset.b]=el.type==="range"?num(el.value):el.value; if(el.dataset.b==="staffIdx")SET.staffIdx=num(el.value); saveSettings(); paintBand(); }); });
+  $$("#bandForm [data-b]").forEach(el=>{ el.value=SET[el.dataset.b]; el.addEventListener("input",()=>{ SET[el.dataset.b]=el.type==="range"?num(el.value):el.value; if(el.dataset.b==="staffIdx")SET.staffIdx=num(el.value); saveSettings(); paintBand(); paintBatch(); }); });
   $("#bandDl").onclick=downloadBand;
-  paintBand();
+  paintBand(); bindBatch();
 }
-async function drawBand(srcCanvas){
+async function drawBand(srcCanvas,ov){
+  const BP=(ov&&ov.pos)||SET.bandPos, BY=(ov&&ov.y!=null)?ov.y:SET.bandY;
   const W=srcCanvas.width, H=srcCanvas.height;
   const c=document.createElement("canvas"); c.width=W; c.height=H; const g=c.getContext("2d");
   g.drawImage(srcCanvas,0,0);
-  const bh=Math.round(H*num(SET.bandPct)/100), y0=SET.bandPos==="top"?0:SET.bandPos==="custom"?Math.max(0,Math.min(H-bh,Math.round(H*num(SET.bandY)/100))):H-bh;
+  const bh=Math.round(H*num(SET.bandPct)/100), y0=BP==="top"?0:BP==="custom"?Math.max(0,Math.min(H-bh,Math.round(H*num(BY)/100))):H-bh;
   g.fillStyle="#fff"; g.fillRect(0,y0,W,bh);
   // accent lines
   const lw=Math.max(2,bh*0.035);
   const grad=g.createLinearGradient(0,0,W,0); grad.addColorStop(0,"#2b3864"); grad.addColorStop(.6,"#367069"); grad.addColorStop(1,"#5fa877");
-  g.fillStyle=grad; g.fillRect(0,SET.bandPos==="top"?y0+bh-lw:y0,W,lw);
+  g.fillStyle=grad; g.fillRect(0,BP==="top"?y0+bh-lw:y0,W,lw);
   const s=staff(); const pad=bh*0.12; const U=Math.min(bh,W*0.11); // unit
   const font=(w,px)=>`${w} ${px}px "Noto Sans JP", sans-serif`;
   // logo
-  const logo=await getLogoImage(); let x=pad*1.3; const cy=y0+bh/2+(SET.bandPos==="top"?-lw/2:lw/2);
+  const logo=await getLogoImage(); let x=pad*1.3; const cy=y0+bh/2+(BP==="top"?-lw/2:lw/2);
   if(logo){ const lh=U*0.58, lwid=lh*(logo.width/logo.height||1); g.drawImage(logo,x,cy-lh/2,lwid,lh); x+=lwid+pad; }
   // company
   g.fillStyle="#2b3864"; g.textBaseline="middle";
@@ -1968,6 +1992,76 @@ async function downloadBand(){
     await saveFile(pdf.output("blob"),`販売図面_${st.P.name||"物件"}_sIgNaL.pdf`);
     setBandStatus("");
   }catch(e){ setBandStatus("PDFの作成に失敗しました："+(e.message||e),true); }
+}
+
+/* ---- まとめて帯替え ---- */
+
+function bbStatus(m,err){ const s=$("#bbStatus"); if(!s) return; s.textContent=m; s.classList.toggle("show",!!m); s.classList.toggle("err",!!err); }
+function bindBatch(){
+  const d=$("#bbDrop"); if(!d) return;
+  d.onclick=()=>$("#bbFile").click();
+  $("#bbFile").onchange=e=>{ addBatch([...e.target.files]); e.target.value=""; };
+  ["dragenter","dragover"].forEach(t=>d.addEventListener(t,e=>{e.preventDefault();d.classList.add("on")}));
+  ["dragleave","drop"].forEach(t=>d.addEventListener(t,e=>{e.preventDefault();d.classList.remove("on")}));
+  d.addEventListener("drop",e=>addBatch([...e.dataTransfer.files]));
+  $("#bbPages").onchange=paintBatch;
+  $("#bbClear").onclick=()=>{ st.batch=[]; paintBatch(); bbStatus(""); };
+  $("#bbDl").onclick=downloadBatch;
+  paintBatch();
+}
+async function addBatch(files){
+  files=files.filter(f=>/pdf|image/.test(f.type)||/\.(pdf|jpe?g|png|heic|webp)$/i.test(f.name));
+  if(!files.length) return toast("PDFか画像を選んでください");
+  const room=30-st.batch.length; if(files.length>room){ toast(`一度に扱えるのは30ファイルまでです（${files.length-room}件は追加していません）`,5000); files=files.slice(0,room); }
+  let ok=0, ng=[];
+  for(let k=0;k<files.length;k++){ const f=files[k]; bbStatus(`読み込み中… ${k+1}/${files.length}　${f.name}`);
+    try{ const pages=await fileToCanvases(f,1800,10); st.batch.push({name:f.name.replace(/\.[^.]+$/,""),pages,ov:{}}); ok++; }
+    catch(e){ ng.push(f.name); } }
+  bbStatus(ng.length?`${ok}件を読み込みました。読み込めなかったファイル：${ng.join("、")}`:`${ok}件を読み込みました。帯の位置を確認して保存してください。`,!!ng.length);
+  paintBatch();
+}
+function bbIdx(it){ return $("#bbPages")&&$("#bbPages").value==="first"?[0]:it.pages.map((_,i)=>i); }
+let bbPainting=0;
+async function paintBatch(){
+  const box=$("#bbList"); if(!box) return; const my=++bbPainting;
+  $("#bbDl").disabled=!st.batch.length;
+  if(!st.batch.length){ box.innerHTML=""; return; }
+  await document.fonts.ready;
+  const total=st.batch.reduce((a,it)=>a+bbIdx(it).length,0);
+  box.innerHTML=`<div class="muted" style="grid-column:1/-1">${st.batch.length}ファイル・${total}ページ</div>`;
+  for(let fi=0;fi<st.batch.length;fi++){ const it=st.batch[fi];
+    for(const pi of bbIdx(it)){
+      if(my!==bbPainting) return;
+      const c=await drawBand(it.pages[pi],it.ov[pi]); const r=300/c.width; const t=document.createElement("canvas"); t.width=300; t.height=Math.round(c.height*r); t.getContext("2d").drawImage(c,0,0,t.width,t.height);
+      const el=document.createElement("div"); el.className="bb-item";
+      el.innerHTML=`<div class="bb-h"><span title="${esc(it.name)}">${esc(it.name)}${it.pages.length>1?`　p.${pi+1}`:""}</span><button class="bb-x" title="このファイルを外す">×</button></div>`;
+      t.className="bandpv"; t.style.cursor="crosshair"; t.title="タップした位置にこの図面の帯を移動";
+      t.onclick=e=>{ const rc=t.getBoundingClientRect(); const yPct=(e.clientY-rc.top)/rc.height*100; it.ov[pi]={pos:"custom",y:Math.round((yPct-num(SET.bandPct)/2)*10)/10}; paintBatch(); };
+      el.appendChild(t);
+      if(it.ov[pi]){ const b=document.createElement("button"); b.className="btn sm ghost bb-reset"; b.textContent="帯の位置を全体の設定に戻す"; b.onclick=()=>{ delete it.ov[pi]; paintBatch(); }; el.appendChild(b); }
+      el.querySelector(".bb-x").onclick=()=>{ st.batch.splice(fi,1); paintBatch(); };
+      box.appendChild(el);
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+}
+async function downloadBatch(){
+  if(!st.batch.length) return;
+  const {jsPDF}=window.jspdf; const each=$("#bbOut").value==="each";
+  const total=st.batch.reduce((a,it)=>a+bbIdx(it).length,0); let n=0, pdf=null;
+  const addPage=(c)=>{ const land=c.width>c.height; const pw=land?297:210, ph=land?210:297;
+    if(!pdf) pdf=new jsPDF({orientation:land?"l":"p",unit:"mm",format:"a4",compress:true}); else pdf.addPage("a4",land?"l":"p");
+    const r=Math.min(pw/c.width,ph/c.height); const w=c.width*r,h=c.height*r; pdf.addImage(c.toDataURL("image/jpeg",0.88),"JPEG",(pw-w)/2,(ph-h)/2,w,h); };
+  try{
+    $("#bbDl").disabled=true;
+    for(const it of st.batch){
+      for(const pi of bbIdx(it)){ n++; bbStatus(`PDFを作成中… ${n}/${total}ページ`); addPage(await drawBand(it.pages[pi],it.ov[pi])); await new Promise(r=>setTimeout(r,0)); }
+      if(each){ await saveFile(pdf.output("blob"),`${it.name}_sIgNaL.pdf`); pdf=null; }
+    }
+    if(!each){ const d=new Date(); await saveFile(pdf.output("blob"),`販売図面_帯替え_${st.batch.length}件_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.pdf`); }
+    bbStatus(`${st.batch.length}件・${total}ページの帯替えPDFを保存しました。`);
+  }catch(e){ bbStatus("PDFの作成に失敗しました："+(e.message||e),true); }
+  finally{ $("#bbDl").disabled=!st.batch.length; }
 }
 function setBandStatus(m,err){ const s=$("#bandStatus"); if(!s) return; s.textContent=m; s.classList.toggle("show",!!m); s.classList.toggle("err",!!err); }
 
@@ -2329,10 +2423,12 @@ async function loadMaisoku(file){
 }
 const drop=$("#drop");
 drop.onclick=()=>$("#file").click();
-$("#file").onchange=e=>{ const f=e.target.files[0]; if(f) loadMaisoku(f); e.target.value=""; };
+function takeFiles(fs){ fs=[...fs]; if(!fs.length) return; if(fs.length===1) return loadMaisoku(fs[0]);
+  st.tab="band"; renderTabs(); renderView(); setTimeout(()=>{ addBatch(fs); const c=$("#bbCard"); c&&c.scrollIntoView({behavior:"smooth",block:"start"}); },50); }
+$("#file").onchange=e=>{ takeFiles(e.target.files); e.target.value=""; };
 ["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("on")}));
 ["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("on")}));
-drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) loadMaisoku(f); });
+drop.addEventListener("drop",e=>takeFiles(e.dataTransfer.files));
 $("#reread").onclick=()=>extractWithAI();
 
 /* ================= AI (sample) ================= */
