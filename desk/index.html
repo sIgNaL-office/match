@@ -217,6 +217,34 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 .sheet .ln-tbl tr.q td{background:#f1f6f4;border-bottom:1px solid #cfe0da}
 .sheet .ln-tbl.sm td{padding:1px 5px;font-size:9.5px;line-height:1.45}
 .sheet .ln-tbl.sm .ln-bar{height:6px}
+.sheet.rv{font-size:11px}
+.rv-m{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:8px}
+.rv-mc{border:1px solid #dfe7e8;border-top:4px solid;border-radius:10px;padding:8px 11px}
+.rv-mc.acc{background:#eaf2ef}
+.rv-mt{font-size:11px;font-weight:700;color:#2b3864;display:flex;align-items:center;gap:6px}
+.rv-mt i,.rv-bl i,.rv-lg i{display:inline-block;width:9px;height:9px;border-radius:3px}
+.rv-mv{font-size:21px;font-weight:900;color:#1d2a4d;margin-top:2px;font-variant-numeric:tabular-nums}.rv-mv small{font-size:10px;font-weight:500;margin-left:2px}
+.rv-mc.acc .rv-mv{color:#367069}
+.rv-ms{font-size:9px;color:#6b7a80;line-height:1.5;margin-top:2px}
+.rv-hl{margin-top:10px;background:linear-gradient(90deg,#2b3864,#367069);color:#fff;border-radius:10px;padding:10px 14px;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.rv-hl b{font-size:17px;color:#fff}.rv-hl span{font-size:11px;opacity:.9}
+.rv-sec{font-size:12px;font-weight:700;color:#2b3864;margin-top:10px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.rv-sec small{font-weight:500;color:#6b7a80;font-size:9.5px}
+.rv-lg{display:flex;gap:12px;font-size:9.5px;font-weight:500;color:#4a585e;margin-left:auto}.rv-lg span{display:flex;align-items:center;gap:4px}.rv-lg i{height:3px;width:16px;border-radius:2px}.rv-lg i.d{background:none;border-top:2px dashed;height:0}
+.rv-bar{display:grid;grid-template-columns:110px 1fr 92px;grid-template-rows:auto auto;column-gap:10px;align-items:center;margin-top:6px}
+.rv-bl{font-size:11px;font-weight:700;color:#2b3864;display:flex;align-items:center;gap:6px}
+.rv-bt{background:#f1f4f5;border-radius:6px;height:16px;overflow:hidden}.rv-bt div{height:100%;border-radius:6px}
+.rv-bv{font-size:16px;font-weight:900;text-align:right;color:#4a585e;font-variant-numeric:tabular-nums}.rv-bv small{font-size:9px;font-weight:500;margin-left:2px}.rv-bv.best{color:#367069}
+.rv-bs{grid-column:2/4;font-size:9px;color:#6b7a80}
+.rv-cols{display:grid;grid-template-columns:1.15fr 1fr;gap:12px;align-items:start}
+.sheet .rv-t{margin-top:4px}.sheet .rv-t td{padding:2.4px 5px;font-size:10px}
+.rv-box{border:1px solid #dfe7e8;border-radius:10px;padding:7px 10px;margin-top:4px}.rv-box+.rv-box{margin-top:7px}
+.rv-bh{font-size:10.5px;font-weight:700;color:#367069;margin-bottom:3px}
+.rv-sn{display:flex;justify-content:space-between;font-size:9.8px;padding:1.5px 0;border-bottom:1px dashed #eef2f2}
+.rv-pt{font-size:9.6px;line-height:1.55;color:#33424a}
+.rv-ov{position:fixed;inset:0;z-index:9999;background:rgba(20,28,48,.82);overflow:auto;padding:12px;display:flex;justify-content:center;align-items:flex-start}
+.rv-ovin{position:relative;flex:none;overflow:hidden}.rv-ovin .sheet{box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.rv-x{position:fixed;top:10px;right:14px;z-index:10000;width:44px;height:44px;border-radius:50%;border:0;background:#fff;color:#2b3864;font-size:26px;line-height:44px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.f.fsec{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--teal,#367069);border-bottom:1px solid #dfe7e8;padding:8px 0 3px;margin-top:2px}
 .sheet .ln-bar{height:7px;background:#eef2f2;border-radius:4px;overflow:hidden}.sheet .ln-bar i{display:block;height:100%;background:linear-gradient(90deg,#2b3864,#367069)}
 /* 資金計画書 v2 */
 .pl-steps{display:flex;gap:10px;margin-top:8px}
@@ -490,6 +518,7 @@ const PF_MOTO=[
 function propFields(){ return [...PF_COMMON,...(st.mode==="sale"?PF_SALE:PF_RENT),...PF_MOTO]; }
 
 function fieldHTML(f,val,ctx){
+  if(f.type==="sec") return `<div class="f wide fsec">${esc(f.label)}</div>`;
   const id=`${ctx}__${f.k}`;
   const cls=["f"]; if(f.wide)cls.push("wide"); if(f.type==="check")cls.push("chk");
   if(ctx!=="P"){ cls.push(st.touched[ctx+"."+f.k]?"touched":"auto"); }
@@ -966,6 +995,162 @@ DOCS.loan={ title:"返済計画表", file:()=>`返済計画表_${docVals("loan")
     </div>`;
   }
 };
+
+/* ---- 賃貸 vs 購入 比較 ---- */
+function rvbCalc(v,over){
+  v=Object.assign({},v,over||{});
+  const H=35, X=Math.min(H,Math.max(1,Math.round(num(v.X)||10)));
+  const price=num(v.price)*1e4, down=num(v.down)*1e4, feeP=num(v.feePct)/100;
+  const r=num(v.rate), yrs=Math.max(1,Math.round(num(v.years)||35)), age=num(v.age);
+  const g=num(v.g)/100, rent0=num(v.rent), rg=num(v.rentG)/100, renew=num(v.renew);
+  const mg0=num(v.mg), mgG=num(v.mgG)/100, taxY=num(v.taxY);
+  const dCap=num(v.dedCap)*1e4, dYrs=Math.round(num(v.dedYears)), dMax=num(v.dedTax)||Infinity;
+  const W=Math.max(1,Math.round(num(v.W)||5)), save=num(v.save), rC=v.rateC===""||v.rateC===undefined?r:num(v.rateC);
+  const inv=num(v.invest)/100;
+  const sellCost=p=>brokerageBase(p,false)*1.1+40000;
+  const termFor=s=>age?Math.max(1,Math.min(yrs,80-(age+s))):yrs;
+  // s: 購入する年（0=今、Infinity=賃貸のまま）
+  function path(s,dn,rate){
+    const out=[0], ded=[0], eq=[0], bal=[0], monthly1={};
+    let cum=0, cumDed=0, B=0, pay=0, n=0, k=0, buyY=0, term=0, P0=0, fee=0;
+    for(let m=0;m<H*12;m++){
+      const y=Math.floor(m/12);
+      if(m===s*12){ P0=price*Math.pow(1+g,s); fee=P0*feeP; buyY=y; term=termFor(s);
+        const d=Math.min(dn,P0); B=Math.max(0,P0-d); n=term*12; k=0; pay=monthly(B,rate,term); cum+=d+fee; monthly1.pay=pay; monthly1.loan=B; monthly1.price=P0; monthly1.down=d; monthly1.fee=fee; monthly1.term=term; }
+      if(m<s*12){ const rent=rent0*Math.pow(1+rg,y); cum+=rent; if(renew&&m>0&&m%24===0) cum+=rent*renew; }
+      else{ if(k<n){ const it=B*rate/100/12; let pr=pay-it; if(k===n-1||pr>B) pr=B; B-=pr; cum+=pr+it; k++; }
+        cum+=mg0*Math.pow(1+mgG,y)+taxY/12; }
+      if(m%12===11){ const t=y+1;
+        if(s<Infinity&&t>s&&t-s<=dYrs){ const dd=Math.min(Math.min(B,dCap)*0.007,dMax); cumDed+=dd; }
+        let e=0; if(s<Infinity&&t*12>s*12){ const Pt=price*Math.pow(1+g,t); e=Pt-sellCost(Pt)-B; }
+        else if(inv){ e=0; }
+        out.push(cum); ded.push(cumDed); eq.push(e); bal.push(B); }
+    }
+    return {out,ded,eq,bal,m1:monthly1};
+  }
+  const A=path(0,down,r), Bp=path(Infinity,0,r), C=path(W,down+save*12*W,rC);
+  // 手元資金の運用益（購入に使わなかったお金）
+  const cash0=down+price*feeP;
+  const gainB=t=>inv?cash0*(Math.pow(1+inv,t)-1):0;
+  const gainC=t=>inv?cash0*(Math.pow(1+inv,Math.min(t,W))-1):0;
+  const net=(p,t,gain)=>p.out[t]-p.ded[t]-p.eq[t]-(gain?gain(t):0);
+  const series={A:[],B:[],C:[]};
+  for(let t=0;t<=H;t++){ series.A.push(net(A,t)); series.B.push(net(Bp,t,gainB)); series.C.push(net(C,t,gainC)); }
+  let be=null; for(let t=1;t<=H;t++){ if(series.A[t]<series.B[t]){ be=t; break; } }
+  const mA=A.m1.pay+mg0+taxY/12, mC=C.m1.pay+mg0*Math.pow(1+mgG,W)+taxY/12;
+  return {H,X,W,A,B:Bp,C,series,be,mA,mC,rent0,price,r,rC,yrs,age,g,termA:A.m1.term,termC:C.m1.term,gainB,cash0,sellCost};
+}
+const RVB_COL={A:"#367069",B:"#9aa5ab",C:"#2b3864"};
+function rvbChart(c){
+  const W=700,H=230,L=58,R=14,T=14,Bm=26, xs=t=>L+(W-L-R)*(t/c.H);
+  const all=[...c.series.A,...c.series.B,...c.series.C].slice(1);
+  let mx=Math.max(...all,1), mn=Math.min(0,...all);
+  const step=[100,200,500,1000,2000,5000].map(s=>s*1e4).find(s=>(mx-mn)/s<=7)||1e8;
+  mx=Math.ceil(mx/step)*step; mn=Math.floor(mn/step)*step;
+  const ys=v=>T+(H-T-Bm)*(1-(v-mn)/(mx-mn||1));
+  let g="";
+  for(let v=mn;v<=mx+1;v+=step){ g+=`<line x1="${L}" x2="${W-R}" y1="${ys(v)}" y2="${ys(v)}" stroke="${v===0?"#9aa5ab":"#e6ecee"}" stroke-width="1"/><text x="${L-6}" y="${ys(v)+3.5}" text-anchor="end" font-size="9.5" fill="#6b7a80">${comma(Math.round(v/1e4))}</text>`; }
+  for(let t=0;t<=c.H;t+=5) g+=`<text x="${xs(t)}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="#6b7a80">${t}年</text>`;
+  g+=`<text x="${L-6}" y="${T-4}" text-anchor="end" font-size="9" fill="#6b7a80">万円</text>`;
+  g+=`<rect x="${xs(c.X)-1}" y="${T}" width="2" height="${H-T-Bm}" fill="#5fa877" opacity=".5"/><text x="${xs(c.X)+4}" y="${T+10}" font-size="9.5" fill="#367069" font-weight="700">${c.X}年後</text>`;
+  const line=(arr,col,w,dash)=>`<polyline fill="none" stroke="${col}" stroke-width="${w}" ${dash?`stroke-dasharray="${dash}"`:""} stroke-linejoin="round" points="${arr.map((v,t)=>`${xs(t).toFixed(1)},${ys(v).toFixed(1)}`).join(" ")}"/>`;
+  g+=line(c.series.B,RVB_COL.B,2.4)+line(c.series.C,RVB_COL.C,2,"6 4")+line(c.series.A,RVB_COL.A,3.2);
+  ["B","C","A"].forEach(k=>{ const v=c.series[k][c.X]; g+=`<circle cx="${xs(c.X)}" cy="${ys(v)}" r="4" fill="#fff" stroke="${RVB_COL[k]}" stroke-width="2.2"/>`; });
+  if(c.be&&c.be!==c.X) g+=`<circle cx="${xs(c.be)}" cy="${ys(c.series.A[c.be])}" r="3" fill="${RVB_COL.A}"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${g}</svg>`;
+}
+DOCS.rvb={ title:"賃貸・購入 比較", file:()=>`賃貸と購入の比較_${docVals("rvb").cust||"お客様"}.pdf`,
+  fields:()=>[
+    {k:"_s1",type:"sec",label:"お客様"},
+    {k:"cust",label:"お客様名",def:()=>docVals("plan").cust||""},
+    {k:"age",label:"ご年齢（任意）",unit:"歳・完済年齢の計算用",type:"number",def:"",ph:"例：35"},
+    {k:"date",label:"作成日",type:"date",def:today()},
+    {k:"staff",label:"担当",type:"select",opts:staffOpts(),def:String(SET.staffIdx)},
+    {k:"_s2",type:"sec",label:"いまの住まい（賃貸）"},
+    {k:"rent",label:"今の家賃（管理費込み）",unit:"円/月",type:"number",def:150000},
+    {k:"rentG",label:"家賃の上昇",unit:"%/年",type:"number",def:0.5},
+    {k:"renew",label:"更新料",unit:"ヶ月分/2年",type:"number",def:1},
+    {k:"_s3",type:"sec",label:"購入する場合"},
+    {k:"price",label:"物件価格",unit:"万円",type:"number",def:()=>planPrice()>0?Math.round(planPrice()/1e4):5000},
+    {k:"down",label:"頭金",unit:"万円",type:"number",def:0},
+    {k:"feePct",label:"購入時の諸費用",unit:"% of 価格",type:"number",def:7},
+    {k:"rate",label:"金利",unit:"%",type:"number",def:()=>st.touched["plan.rate1"]?docVals("plan").rate1:(typeof RATES!=="undefined"&&RATES.list&&RATES.list[0]?RATES.list[0].rate:docVals("plan").rate1)},
+    {k:"years",label:"返済期間",unit:"年",type:"number",def:35},
+    {k:"mg",label:"管理費・修繕積立金",unit:"円/月（戸建は0）",type:"number",def:30000},
+    {k:"mgG",label:"管理費等の上昇",unit:"%/年",type:"number",def:1},
+    {k:"taxY",label:"固定資産税・都市計画税",unit:"円/年",type:"number",def:()=>Math.round((planPrice()>0?planPrice():5e7)*0.003/1000)*1000},
+    {k:"g",label:"物件価格の変動",unit:"%/年（－は値下がり）",type:"number",def:0},
+    {k:"dedCap",label:"住宅ローン控除の対象上限",unit:"万円（物件の性能で異なる）",type:"number",def:2000},
+    {k:"dedYears",label:"控除の期間",unit:"年",type:"number",def:10},
+    {k:"dedTax",label:"年間控除の上限＝納税額（任意）",unit:"円/年",type:"number",def:"",ph:"例：300000"},
+    {k:"_s4",type:"sec",label:"貯めてから買う場合／比較の条件"},
+    {k:"W",label:"何年後に買う",unit:"年後",type:"number",def:5},
+    {k:"save",label:"その間の毎月の貯金",unit:"円/月（頭金に上乗せ）",type:"number",def:50000},
+    {k:"rateC",label:"その時の金利（任意）",unit:"%（空欄＝今と同じ）",type:"number",def:"",ph:"例：1.5"},
+    {k:"X",label:"売却を想定する時期",unit:"年後",type:"number",def:10},
+    {k:"invest",label:"手元資金の運用利回り（任意）",unit:"%/年",type:"number",def:0},
+  ],
+  render(v){
+    const c=rvbCalc(v), s=staff(num(v.staff)), X=c.X;
+    const a=c.series.A[X], b=c.series.B[X], cc=c.series.C[X], man=y=>comma(Math.round(y/1e4));
+    const diff=b-a, diffC=cc-a;
+    const best=Math.min(a,b,cc);
+    const bar=(k,label,val,sub)=>{ const mx=Math.max(a,b,cc,1), w=Math.max(2,Math.max(0,val)/mx*100);
+      return `<div class="rv-bar"><div class="rv-bl"><i style="background:${RVB_COL[k]}"></i>${label}</div><div class="rv-bt"><div style="width:${w}%;background:${RVB_COL[k]}"></div></div><div class="rv-bv ${val===best?"best":""}">${man(val)}<small>万円</small></div><div class="rv-bs">${sub}</div></div>`; };
+    const rowsY=[1,3,5,10,15,20,25,30,35].filter(t=>t<=c.H);
+    if(!rowsY.includes(X)) { rowsY.push(X); rowsY.sort((p,q)=>p-q); }
+    const sens=[-2,-1,0,1,2].map(g=>{ const k=rvbCalc(v,{g}); return {g,d:k.series.B[X]-k.series.A[X]}; });
+    const ageTxt=(term,s)=>c.age?`／完済 ${c.age+s+term}歳`:"";
+    const head=diff>0?`${X}年後に売却した場合、<b>今買う方が 約${man(diff)}万円 おトク</b>`:`${X}年後に売却した場合、この条件では<b>賃貸の方が 約${man(-diff)}万円 負担が少ない</b>`;
+    const sub2=diffC>0?`${c.W}年貯めてから買うより、今買う方が 約${man(diffC)}万円 有利`:`${c.W}年貯めてから買う方が 約${man(-diffC)}万円 有利`;
+    return `<div class="sheet pl rv">
+      <div class="pl-top"></div>
+      <div class="pl-head" style="padding:16px 0 6px">
+        <div><div class="pl-eyebrow">RENT vs BUY</div><h1 style="font-size:23px">賃貸と購入の比較シミュレーション</h1></div>
+        <div style="text-align:right"><div class="pl-cust" style="font-size:18px">${esc(v.cust||"　　　　")}<small>様</small></div><div class="pl-date">作成日 ${jDate(v.date)}</div></div>
+      </div>
+      <div class="rv-m">
+        <div class="rv-mc" style="border-color:${RVB_COL.B}"><div class="rv-mt"><i style="background:${RVB_COL.B}"></i>賃貸のまま</div><div class="rv-mv">${comma(Math.round(c.rent0))}<small>円/月</small></div><div class="rv-ms">家賃（管理費込み）${num(v.rentG)?`・年${num(v.rentG)}%上昇`:""}${num(v.renew)?`・更新料${num(v.renew)}ヶ月/2年`:""}</div></div>
+        <div class="rv-mc acc" style="border-color:${RVB_COL.A}"><div class="rv-mt"><i style="background:${RVB_COL.A}"></i>今買う</div><div class="rv-mv">${comma(Math.round(c.mA))}<small>円/月</small></div><div class="rv-ms">返済 ${comma(Math.round(c.A.m1.pay))}円＋管理費等・税（${c.r}%／${c.termA}年${ageTxt(c.termA,0)}）</div></div>
+        <div class="rv-mc" style="border-color:${RVB_COL.C}"><div class="rv-mt"><i style="background:${RVB_COL.C}"></i>${c.W}年貯めてから買う</div><div class="rv-mv">${comma(Math.round(c.mC))}<small>円/月</small></div><div class="rv-ms">${c.W}年間は家賃。頭金 ${man(c.C.m1.down)}万円・価格 ${man(c.C.m1.price)}万円（${c.rC}%／${c.termC}年${ageTxt(c.termC,c.W)}）</div></div>
+      </div>
+      <div class="rv-hl">${head}<span>${sub2}</span></div>
+      <div class="rv-sec">${X}年後に売却した場合の「実質負担」<small>＝ 住まいに払ったお金の合計 − 売却して手元に戻るお金</small></div>
+      ${bar("B","賃貸のまま",b,`家賃・更新料 ${man(c.B.out[X])}万円${c.gainB(X)?`／運用益 −${man(c.gainB(X))}万円`:""}`)}
+      ${bar("A","今買う",a,`支払い ${man(c.A.out[X])}万円 − 控除 ${man(c.A.ded[X])}万円 − 売却手取り ${man(c.A.eq[X])}万円`)}
+      ${bar("C",`${c.W}年後に買う`,cc,X>=c.W?`支払い ${man(c.C.out[X])}万円 − 控除 ${man(c.C.ded[X])}万円 − 売却手取り ${man(c.C.eq[X])}万円`:"まだ購入前（家賃のみ）")}
+      <div class="rv-sec" style="margin-top:10px">売却する時期ごとの実質負担の推移 <span class="rv-lg"><span><i style="background:${RVB_COL.B}"></i>賃貸のまま</span><span><i style="background:${RVB_COL.A}"></i>今買う</span><span><i class="d" style="border-color:${RVB_COL.C}"></i>${c.W}年後に買う</span></span></div>
+      ${rvbChart(c)}
+      <div class="rv-cols">
+        <table class="ln-tbl rv-t">
+          <tr><th>売却時期</th><th>賃貸のまま</th><th>今買う</th><th>${c.W}年後に買う</th><th>今買うと</th></tr>
+          ${rowsY.map(t=>{ const d=c.series.B[t]-c.series.A[t]; return `<tr class="${t===X?"q":""}"><td>${t}年後</td><td class="r">${man(c.series.B[t])}</td><td class="r b">${man(c.series.A[t])}</td><td class="r">${man(c.series.C[t])}</td><td class="r" style="color:${d>0?"#367069":"#b4553d"};font-weight:700">${d>0?"＋":"－"}${man(Math.abs(d))}</td></tr>`; }).join("")}
+        </table>
+        <div>
+          <div class="rv-box"><div class="rv-bh">価格が変動したら？（${X}年後・今買う場合の差）</div>
+            ${sens.map(x=>`<div class="rv-sn"><span>年 ${x.g>0?"＋":""}${x.g}%</span><b style="color:${x.d>0?"#367069":"#b4553d"}">${x.d>0?"今買う方が約"+man(x.d)+"万円有利":"賃貸の方が約"+man(-x.d)+"万円有利"}</b></div>`).join("")}</div>
+          <div class="rv-box"><div class="rv-bh">ポイント</div>
+            <div class="rv-pt">${c.be?`・<b>${c.be}年目以降</b>に売却するなら、今買う方が負担が少なくなります`:"・この条件では、売却時期にかかわらず賃貸の方が負担が少なくなります"}</div>
+            <div class="rv-pt">・${X}年後の残債 ${man(c.A.bal[X])}万円 → 売却すると約${man(c.A.eq[X])}万円が手元に戻る想定</div>
+            <div class="rv-pt">・${c.W}年待つと、完済が${c.W}年遅れ${c.termC<c.termA?`（返済期間は${c.termC}年に短縮）`:""}、その間の家賃 約${man(c.B.out[c.W])}万円は戻りません</div>
+            <div class="rv-pt">・完済後の住居費は管理費等と税のみ（賃貸は家賃が続きます）</div></div>
+        </div>
+      </div>
+      <div class="pl-note" style="margin-top:6px">※単位：万円。実質負担＝購入時の頭金・諸費用、ローン返済、管理費・修繕積立金、固定資産税等の合計から、住宅ローン控除（年末残高×0.7%、上限 ${comma(num(v.dedCap))}万円・${num(v.dedYears)}年${num(v.dedTax)?`・年${comma(num(v.dedTax))}円まで`:""}）と売却手取り（売却価格−仲介手数料等−残債）を差し引いた金額。賃貸は家賃・更新料の合計${num(v.invest)?`から、購入に使わなかった資金の運用益（年${num(v.invest)}%）を差し引いた金額`:""}。※物件価格は年${num(v.g)}%で変動する想定。将来の価格・金利・家賃・税制を保証するものではありません。住宅ローン控除の対象・上限は物件の性能、入居年、世帯により異なります。譲渡所得税・リフォーム費用・火災保険料・引越費用は含みません。</div>
+      ${footer(s)}
+    </div>`;
+  }
+};
+function rvbPresent(){
+  const ov=document.createElement("div"); ov.className="rv-ov";
+  ov.innerHTML=`<button class="rv-x" aria-label="閉じる">×</button><div class="rv-ovin">${DOCS.rvb.render(docVals("rvb"))}</div>`;
+  document.body.appendChild(ov);
+  const fit=()=>{ const sh=ov.querySelector(".sheet"); const sc=Math.min((innerWidth-24)/794,1.6); sh.style.transform=`scale(${sc})`; sh.style.transformOrigin="top left"; ov.querySelector(".rv-ovin").style.width=794*sc+"px"; ov.querySelector(".rv-ovin").style.height=1123*sc+"px"; };
+  fit(); addEventListener("resize",fit);
+  const close=()=>{ removeEventListener("resize",fit); ov.remove(); document.removeEventListener("keydown",esc_); };
+  const esc_=e=>{ if(e.key==="Escape") close(); };
+  ov.querySelector(".rv-x").onclick=close; document.addEventListener("keydown",esc_);
+}
 
 /* ---- 送付状 ---- */
 DOCS.cover={ title:"送付状", file:()=>`送付状_${today()}.pdf`,
@@ -1830,6 +2015,11 @@ function viewTools(v){
     </div>
     <div class="card" style="grid-column:1/-1"><h3>今月の住宅ローン金利 <span class="tag">変動金利・低い順 上位5</span></h3><div id="rateBox"></div></div>
     ${ydHTML()}
+    <div class="card" style="grid-column:1/-1"><h3>賃貸と購入の比較 <span class="tag">接客用・今買う／賃貸のまま／貯めてから買う</span></h3>
+      <div class="two" style="grid-template-columns:minmax(300px,420px) 1fr">
+        <div>${docFormHTML("rvb")}<div class="row" style="margin-top:10px"><button class="btn" id="rvShow">画面いっぱいでお客様に見せる</button><button class="btn ghost" id="rvDl">PDFをダウンロード</button><button class="btn sm ghost" id="rvPlan">資金計画書の価格・金利を使う</button></div></div>
+        <div class="pv-wrap">${previewHTML("rvb")}</div>
+      </div></div>
     <div class="card" style="grid-column:1/-1"><h3>返済計画表 <span class="tag">元利・元金均等／ボーナス払い／金利変更</span></h3>
       <div class="two" style="grid-template-columns:minmax(300px,420px) 1fr">
         <div>${docFormHTML("loan")}<div class="row" style="margin-top:10px"><button class="btn" id="lnDl">返済計画表PDFをダウンロード</button><button class="btn sm ghost" id="lnPlan">資金計画書の借入額・金利を使う</button></div></div>
@@ -1878,6 +2068,9 @@ function viewTools(v){
   paintRates(); bindYd();
   bindDocForm("loan",()=>paintPreview("loan")); paintPreview("loan");
   $("#lnDl").onclick=()=>downloadDocs(["loan"],DOCS.loan.file());
+  bindDocForm("rvb",()=>paintPreview("rvb")); paintPreview("rvb");
+  $("#rvDl").onclick=()=>downloadDocs(["rvb"],DOCS.rvb.file()); $("#rvShow").onclick=rvbPresent;
+  $("#rvPlan").onclick=()=>{ Object.keys(st.touched).filter(k=>/^rvb\.(price|rate|cust|taxY)$/.test(k)).forEach(k=>delete st.touched[k]); st.docs.rvb=st.docs.rvb||{}; const pv=docVals("plan"); if(pv.rate1){ st.docs.rvb.rate=pv.rate1; st.touched["rvb.rate"]=true; } syncDocForm("rvb"); paintPreview("rvb"); toast("資金計画書の条件を反映しました"); };
   $("#lnPlan").onclick=()=>{ Object.keys(st.touched).filter(k=>/^loan\.(loan|rate|cust|bank)$/.test(k)).forEach(k=>delete st.touched[k]); syncDocForm("loan"); paintPreview("loan"); toast("資金計画書の条件を反映しました"); };
   // borrowing
   const bc=()=>{ const inc=num($("#bcInc").value)*1e4, r=num($("#bcRatio").value)/100, M=inc*r/12-num($("#bcOther").value);
@@ -2205,10 +2398,10 @@ function onDataChange(){
   paintPropSum();
   for(const id of Object.keys(DOCS)) syncDocForm(id);
   const t=st.tab; if(DOCS[t]){ paintPreview(t); if(t==="plan") paintPlanKv(); }
-  if(t==="tools"){ paintPreview("cover"); paintPreview("loan"); }
+  if(t==="tools"){ paintPreview("cover"); paintPreview("loan"); paintPreview("rvb"); }
   if(t==="hazard") paintPreview("hazard");
 }
-let rz; window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>{ const t=st.tab; if(DOCS[t]) paintPreview(t); if(t==="tools"){ paintPreview("cover"); paintPreview("loan"); } if(t==="hazard") paintPreview("hazard"); },150)});
+let rz; window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>{ const t=st.tab; if(DOCS[t]) paintPreview(t); if(t==="tools"){ paintPreview("cover"); paintPreview("loan"); paintPreview("rvb"); } if(t==="hazard") paintPreview("hazard"); },150)});
 
 /* ================= init ================= */
 paintHeaderLogo(); renderTabs(); renderPropForm(); applyPropOpen(); renderView();
