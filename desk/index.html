@@ -293,6 +293,7 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
   .rate-row{flex-wrap:wrap}
   .rate-act{width:100%;padding-left:40px}
   .card .pl-kpis{grid-template-columns:1fr 1fr!important}
+  #ydOut .pl-cols{grid-template-columns:1fr}
   #saEval .row{flex-wrap:wrap!important}
   #saEval .row input:first-child{flex:1 1 100%!important}
   .links a{padding:9px 10px;font-size:13px}
@@ -455,6 +456,7 @@ const PF_SALE=[
   {k:"price",label:"価格",unit:"万円",type:"number"},
   {k:"mgmtFee",label:"管理費（月）",unit:"円",type:"number"},
   {k:"repairFund",label:"修繕積立金（月）",unit:"円",type:"number"},
+  {k:"income",label:"満室想定年収（収益物件）",unit:"万円",type:"number"},
 ];
 const PF_RENT=[
   {k:"rent",label:"賃料（月）",unit:"円",type:"number"},
@@ -1751,6 +1753,7 @@ function viewTools(v){
       <div class="out" id="cmOut" style="margin-top:8px"></div>
     </div>
     <div class="card" style="grid-column:1/-1"><h3>今月の住宅ローン金利 <span class="tag">変動金利・低い順 上位5</span></h3><div id="rateBox"></div></div>
+    ${ydHTML()}
     <div class="card"><h3>借入可能額（返済比率から逆算）</h3>
       <div class="grid" style="grid-template-columns:1fr 1fr">
         <div class="f"><label>年収（万円）</label><input id="bcInc" inputmode="decimal" value="800"></div>
@@ -1791,7 +1794,7 @@ function viewTools(v){
       out.innerHTML=`<div class="kv">${ten?`<span>借主から 仲介手数料（${ten}ヶ月＋税）</span><b>${yen(ten*val*1.1)}</b>`:""}${lan?`<span>貸主から 仲介手数料（${lan}ヶ月＋税）</span><b>${yen(lan*val*1.1)}</b>`:""}${ad?`<span>貸主から AD（${ad}ヶ月${adTax?"＋税":""}）</span><b>${yen(adY)}</b>`:""}<span style="font-weight:700">受領合計</span><b style="color:var(--teal);font-size:16px">${yen(fee+adY)}</b></div>${over?`<div class="status show err" style="margin-top:6px">仲介手数料は貸主・借主の合計で賃料1ヶ月分＋税が上限です。</div>`:""}<div class="muted" style="margin-top:6px">※ADは貸主が広告活動の対価として支払うもので、仲介手数料とは別扱いです。</div>`; } };
   ["cmType","cmVal","cmAkiya","cmHands","cmTen","cmLan","cmAd","cmAdTax"].forEach(i=>$("#"+i).addEventListener("input",cm));
   $("#cmVal").value=st.mode==="sale"?(st.P.price||""):(st.P.rent||""); $("#cmType").value=st.mode; cm();
-  paintRates();
+  paintRates(); bindYd();
   // borrowing
   const bc=()=>{ const inc=num($("#bcInc").value)*1e4, r=num($("#bcRatio").value)/100, M=inc*r/12-num($("#bcOther").value);
     const p=Math.max(0,principalFromMonthly(M,num($("#bcRate").value),num($("#bcYears").value)));
@@ -1830,6 +1833,114 @@ function paintRates(){
     st.docs.plan["bank"+n]=r.bank; st.docs.plan["rate"+n]=String(r.rate); st.touched["plan.bank"+n]=true; st.touched["plan.rate"+n]=true;
     st.docs.plan.rateMonth=R.month.replace(/^\d+年/,"")+"度"; st.touched["plan.rateMonth"]=true;
     toast(`資金計画書のパターン${n==="1"?"①":"②"}に ${r.bank} ${r.rate}% を設定しました`); });
+}
+
+/* ---------- 収益物件の利回り計算 ---------- */
+const YD_LIFE={RC:47,SRC:47,"重量鉄骨":34,"軽量鉄骨":27,"木造":22};
+const YD_UNIT={RC:20,SRC:22,"重量鉄骨":18,"軽量鉄骨":15,"木造":15};
+function ydDefaults(){
+  const P=st.P, ittou=/一棟|ビル|アパート/.test(P.kind||"")||!/区分|マンション/.test(P.kind||"");
+  const st0=String(P.structure||""); const struct=/SRC|鉄骨鉄筋/.test(st0)?"SRC":/RC|鉄筋コンクリート/.test(st0)?"RC":/軽量/.test(st0)?"軽量鉄骨":/鉄骨|S造/.test(st0)?"重量鉄骨":/木/.test(st0)?"木造":"RC";
+  return { type:ittou?"ittou":"kubun", price:P.price||"", income:P.income||"", vacancy:ittou?5:0,
+    mgmtPct:5, taxes:"", repairPct:ittou?3:0, insurance:"", otherOpex:"", kubunMgmt:(num(P.mgmtFee)+num(P.repairFund))||"",
+    costPct:7, loanPct:90, rate:2.0, years:30,
+    landArea:firstNum(P.landArea)||"", rosen:"", bldgArea:firstNum(P.bldgArea)||"", struct, built:P.built||"",
+    targetYield:"", exitYield:"", hold:10 };
+}
+function ydVals(){ st.yd=st.yd||{}; const d=ydDefaults(); const o={}; for(const k in d) o[k]=(st.yd[k]!==undefined&&st.yd[k]!=="")?st.yd[k]:d[k]; return o; }
+function ydCalc(v){
+  const price=num(v.price)*1e4, gpi=num(v.income)*1e4, it=v.type==="ittou";
+  const egi=gpi*(1-num(v.vacancy)/100);
+  const opexRows=it?[["管理委託料",egi*num(v.mgmtPct)/100],["固定資産税・都市計画税",num(v.taxes)*1e4],["修繕費",gpi*num(v.repairPct)/100],["損害保険料",num(v.insurance)*1e4],["その他（共用部光熱費等）",num(v.otherOpex)*1e4]]
+    :[["管理費・修繕積立金",num(v.kubunMgmt)*12],["賃貸管理手数料",egi*num(v.mgmtPct)/100],["固定資産税・都市計画税",num(v.taxes)*1e4],["損害保険料",num(v.insurance)*1e4],["その他",num(v.otherOpex)*1e4]];
+  const opex=opexRows.reduce((a,r)=>a+r[1],0), noi=egi-opex;
+  const cost=price*num(v.costPct)/100, total=price+cost, loan=price*num(v.loanPct)/100, equity=total-loan;
+  const ads=monthly(loan,num(v.rate),num(v.years))*12, cf=noi-ads;
+  // 積算評価
+  const age=Math.max(0,(new Date().getFullYear()+new Date().getMonth()/12)-(yearOf(v.built)||new Date().getFullYear()));
+  const life=YD_LIFE[v.struct]||47, remain=Math.max(0,life-age);
+  const landV=num(v.rosen)*1000*firstNum(v.landArea), bldgV=(YD_UNIT[v.struct]||20)*1e4*firstNum(v.bldgArea)*(life?remain/life:0);
+  const sekisan=it?landV+bldgV:0;
+  return { price,gpi,egi,opexRows,opex,noi,cost,total,loan,equity,ads,cf,age,life,remain,landV,bldgV,sekisan,
+    surface:price?gpi/price*100:0, net:total?noi/total*100:0, ccr:equity>0?cf/equity*100:0, dscr:ads?noi/ads:0,
+    ber:gpi?(opex+ads)/gpi*100:0, repayRatio:gpi?ads/gpi*100:0,
+    byTarget:num(v.targetYield)?gpi/(num(v.targetYield)/100):0, exitPrice:num(v.exitYield)?noi/(num(v.exitYield)/100):0 };
+}
+const YD_FIELDS=()=>{ const it=ydVals().type==="ittou"; return [
+  {k:"type",label:"種別",type:"select",opts:[["ittou","一棟（アパート・マンション・ビル）"],["kubun","区分マンション"]]},
+  {k:"price",label:"物件価格",unit:"万円",type:"number"},
+  {k:"income",label:"満室想定年収",unit:"万円",type:"number",hint:"月額賃料合計×12"},
+  {k:"vacancy",label:"空室・滞納損失",unit:"%",type:"number"},
+  ...(it?[{k:"mgmtPct",label:"管理委託料",unit:"% of 収入",type:"number"},{k:"repairPct",label:"修繕費",unit:"% of 満室年収",type:"number"}]
+        :[{k:"kubunMgmt",label:"管理費＋修繕積立金",unit:"円/月",type:"number"},{k:"mgmtPct",label:"賃貸管理手数料",unit:"%",type:"number"}]),
+  {k:"taxes",label:"固定資産税・都市計画税",unit:"万円/年",type:"number",ph:"不明なら空欄"},
+  {k:"insurance",label:"損害保険料",unit:"万円/年",type:"number"},
+  {k:"otherOpex",label:it?"その他（共用部光熱費・清掃等）":"その他",unit:"万円/年",type:"number"},
+  {k:"costPct",label:"購入諸費用",unit:"% of 価格",type:"number"},
+  {k:"loanPct",label:"借入割合",unit:"% of 価格",type:"number"},
+  {k:"rate",label:"金利",unit:"%",type:"number"},
+  {k:"years",label:"返済期間",unit:"年",type:"number"},
+  ...(it?[{k:"landArea",label:"土地面積",unit:"㎡",type:"number"},{k:"rosen",label:"路線価",unit:"千円/㎡",type:"number"},{k:"bldgArea",label:"延床面積",unit:"㎡",type:"number"},
+    {k:"struct",label:"構造",type:"select",opts:["RC","SRC","重量鉄骨","軽量鉄骨","木造"]},{k:"built",label:"築年月",ph:"例：1995年3月"}]:[{k:"built",label:"築年月",ph:"例：2005年3月"}]),
+  {k:"targetYield",label:"目標表面利回り（指値の逆算）",unit:"%",type:"number"},
+  {k:"exitYield",label:"出口（売却）想定 実質利回り",unit:"%",type:"number"}]; };
+function ydHTML(){
+  return `<div class="card" style="grid-column:1/-1"><h3>収益物件の利回り計算 <span class="tag">一棟・区分</span></h3>
+    <div class="two" style="grid-template-columns:minmax(300px,460px) 1fr">
+      <div><div class="grid" id="ydForm" style="grid-template-columns:1fr 1fr"></div>
+        <div class="row" style="margin-top:8px"><button class="btn sm ghost" id="ydReset">物件情報から入れ直す</button>${MODE==="gas"?`<button class="btn sm ghost" id="ydMkt">エリアの相場利回りをAIで調べる</button>`:""}</div>
+        <div class="out" id="ydMktOut" style="margin-top:8px;display:none"></div></div>
+      <div id="ydOut"></div>
+    </div></div>`;
+}
+function bindYd(){
+  const box=$("#ydForm"); if(!box) return; const v=ydVals();
+  box.innerHTML=YD_FIELDS().map(f=>fieldHTML(Object.assign({},f,{wide:f.k==="type"}),v[f.k]??"","yd")).join("");
+  $$("[data-k]",box).forEach(el=>el.addEventListener(el.tagName==="SELECT"?"change":"input",()=>{ st.yd=st.yd||{}; st.yd[el.dataset.k]=readInput(el); if(el.dataset.k==="type"){ bindYd(); } else paintYd(); }));
+  $("#ydReset").onclick=()=>{ st.yd={}; bindYd(); };
+  $("#ydMkt")&&($("#ydMkt").onclick=ydMarket);
+  paintYd();
+}
+function paintYd(){
+  const out=$("#ydOut"); if(!out) return; const v=ydVals(), c=ydCalc(v), it=v.type==="ittou";
+  const pc=x=>isFinite(x)&&x?x.toFixed(2)+"%":"―", Y=x=>x?yen(x):"―", M=x=>x?comma(Math.round(x/1e4))+"万円":"―";
+  const warn=[]; if(c.gpi&&c.dscr&&c.dscr<1.2) warn.push(`DSCRが${c.dscr.toFixed(2)}と低く、金融機関の基準（目安1.2〜1.3以上）を下回る可能性があります`);
+  if(c.cf<0&&c.gpi) warn.push("返済後のキャッシュフローがマイナスです");
+  if(it&&c.remain&&num(v.years)>c.remain) warn.push(`返済期間${num(v.years)}年が法定耐用年数の残り（約${Math.floor(c.remain)}年）を超えています。融資期間が短くなる可能性があります`);
+  out.innerHTML=!c.price||!c.gpi?`<div class="note" style="padding:20px">物件価格と満室想定年収を入れると計算します。</div>`:`
+    <div class="pl-kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+      ${[["表面利回り",pc(c.surface)],["実質利回り（NOI÷総投資額）",pc(c.net),1],["自己資金配当率（CCR）",pc(c.ccr)],["DSCR",c.dscr?c.dscr.toFixed(2):"―"]].map(x=>`<div class="pl-kpi ${x[2]?"acc":""}"><div class="pl-kl">${x[0]}</div><div class="pl-kv">${x[1]}</div></div>`).join("")}
+    </div>
+    <div class="pl-cols" style="margin-top:10px">
+      <div class="pl-box"><div class="pl-bh"><span>収支（年間）</span></div>
+        <div class="kv" style="padding:6px 0"><span>満室想定収入（GPI）</span><b>${Y(c.gpi)}</b><span>空室・滞納損失（${num(v.vacancy)}%）</span><b>−${Y(c.gpi-c.egi)}</b><span>実効総収入（EGI）</span><b>${Y(c.egi)}</b>
+        ${c.opexRows.filter(r=>r[1]).map(r=>`<span class="muted">　${r[0]}</span><b class="muted">−${Y(r[1])}</b>`).join("")}
+        <span>運営費 合計（OPEX）</span><b>−${Y(c.opex)}</b><span style="font-weight:700">営業純収益（NOI）</span><b style="color:var(--teal)">${Y(c.noi)}</b>
+        <span>ローン返済（年）</span><b>−${Y(c.ads)}</b><span style="font-weight:700">税引前キャッシュフロー</span><b style="color:${c.cf<0?"#a1361b":"var(--teal)"}">${yen(c.cf)}</b><span class="muted">　月あたり</span><b class="muted">${yen(c.cf/12)}</b></div></div>
+      <div class="pl-box"><div class="pl-bh"><span>投資・融資</span></div>
+        <div class="kv" style="padding:6px 0"><span>物件価格</span><b>${M(c.price)}</b><span>購入諸費用（${num(v.costPct)}%）</span><b>${M(c.cost)}</b><span>総投資額</span><b>${M(c.total)}</b>
+        <span>借入額（${num(v.loanPct)}%）</span><b>${M(c.loan)}</b><span>自己資金</span><b>${M(c.equity)}</b>
+        <span>返済比率（返済÷満室収入）</span><b>${pc(c.repayRatio)}</b><span>損益分岐入居率</span><b>${pc(c.ber)}</b></div></div>
+    </div>
+    ${it?`<div class="pl-box" style="margin-top:10px"><div class="pl-bh"><span>積算評価（金融機関の担保評価の目安）</span></div>
+      <div class="kv" style="padding:6px 0"><span>土地（路線価×土地面積）</span><b>${M(c.landV)}</b><span>建物（再調達${YD_UNIT[v.struct]}万円/㎡×延床×残存${Math.floor(c.remain)}/${c.life}年）</span><b>${M(c.bldgV)}</b>
+      <span style="font-weight:700">積算価格</span><b>${M(c.sekisan)}</b><span>積算÷物件価格</span><b>${c.sekisan?(c.sekisan/c.price*100).toFixed(0)+"%":"―"}</b><span>築年数／法定耐用年数の残り</span><b>${c.age?Math.floor(c.age)+"年":"―"}／${Math.floor(c.remain)}年</b></div></div>`:""}
+    ${num(v.targetYield)||num(v.exitYield)?`<div class="pl-box" style="margin-top:10px"><div class="pl-bh"><span>逆算</span></div><div class="kv" style="padding:6px 0">
+      ${num(v.targetYield)?`<span>表面${num(v.targetYield)}%になる価格（指値の目安）</span><b>${M(c.byTarget)}</b><span>　現在価格との差</span><b>${M(c.price-c.byTarget)}</b>`:""}
+      ${num(v.exitYield)?`<span>実質${num(v.exitYield)}%で売却した場合の想定価格</span><b>${M(c.exitPrice)}</b>`:""}</div></div>`:""}
+    ${warn.map(w=>`<div class="status show err" style="margin-top:6px">${esc(w)}</div>`).join("")}
+    <div class="note" style="margin-top:6px">※税引前・概算です。固定資産税等が空欄のときは0円で計算しています。積算は路線価と構造別の再調達単価の目安による簡易計算です（金融機関により異なります）。</div>`;
+}
+async function ydMarket(){
+  const out=$("#ydMktOut"); out.style.display="block"; const P=st.P, v=ydVals();
+  const where=P.address||P.station||""; if(!where){ out.textContent="物件情報に所在地か交通を入れてください。"; return; }
+  out.textContent="AIがエリアの相場利回りを調べています…（30秒〜1分）";
+  try{ const r=await aiResearch(`日本の収益不動産の検討のために、次のエリア・種別の取引利回りの相場をウェブで調べ、日本語で簡潔にまとめてください。
+エリア：${where}　種別：${v.type==="ittou"?(P.kind||"一棟アパート・マンション"):"区分マンション（投資用）"}${P.built?`　築年：${P.built}`:""}${P.structure?`　構造：${P.structure}`:""}
+まとめる内容：①このエリア（市区町村・最寄駅圏）の表面利回りの相場レンジと平均（掲載物件ベース）②日本不動産研究所「不動産投資家調査」等の期待利回り（キャップレート）で近いエリア・用途のもの ③価格が相場より割安か割高かを判断するための目安。
+各数値の出典（サイト名・時点）を必ず書く。確認できない数値は書かない。300字以内。`,5);
+    out.textContent=r.text.trim()+(r.sources&&r.sources.length?"\n\n出典："+r.sources.slice(0,4).map(x=>x.t).join("／"):"");
+  }catch(e){ out.textContent="調べられませんでした："+e.message; }
 }
 
 /* ---------- 設定 ---------- */
@@ -1923,7 +2034,7 @@ let samplerP=null; function sampler(){ if(!samplerP){
     f.limits=async()=>({images:true}); samplerP=Promise.resolve(f); }
   else samplerP=(window.claude&&window.claude.use)?window.claude.use("sample"):Promise.resolve(null); }
   return samplerP; }
-const EXTRACT_KEYS={deal:"'sale'（売買）か'rent'（賃貸）",name:"物件名（マンション名・○○町○丁目戸建 等）",kind:"種別：土地/新築戸建/中古戸建/中古マンション/新築マンション/一棟アパート/一棟マンション/区分収益/店舗・事務所/ビル/その他",address:"所在地（住居表示。図面の記載どおり。都道府県から）",chiban:"地番",kaoku:"家屋番号",station:"交通（路線・駅・徒歩分）",landArea:"土地面積（単位・公簿/実測の別も記載どおり）",bldgArea:"建物面積または専有面積",layout:"間取り",structure:"構造・階建・所在階",built:"築年月（例：2005年3月）",price:"売買価格（万円の数値。例 6450）",mgmtFee:"管理費 月額（円の数値）",repairFund:"修繕積立金 月額（円の数値）",rent:"賃料 月額（円の数値）",commonFee:"管理費・共益費 月額（円の数値）",deposit:"敷金（ヶ月数の数値）",keyMoney:"礼金（ヶ月数の数値）",guarantee:"保証会社に関する記載",rentInsurance:"火災保険料（円の数値）",keyChange:"鍵交換費（円の数値）",rentOther:"その他初期費用の合計（円の数値）",motoCompany:"元付業者（図面を作成した業者）の会社名。帯や枠に記載",motoBranch:"元付業者の支店・店舗名",motoTel:"元付業者TEL",motoFax:"元付業者FAX",motoPerson:"元付業者の担当者名",torihiki:"取引態様",commission:"手数料・分かれ等の条件",adOk:"広告転載の可否（例：広告可・承諾不要／広告不可／要承諾。記載がなければ空）",remarks:"その他重要事項の要約（用途地域・建ぺい率/容積率・接道・現況・引渡時期など、記載があるもののみ。150字以内）"};
+const EXTRACT_KEYS={deal:"'sale'（売買）か'rent'（賃貸）",name:"物件名（マンション名・○○町○丁目戸建 等）",kind:"種別：土地/新築戸建/中古戸建/中古マンション/新築マンション/一棟アパート/一棟マンション/区分収益/店舗・事務所/ビル/その他",address:"所在地（住居表示。図面の記載どおり。都道府県から）",chiban:"地番",kaoku:"家屋番号",station:"交通（路線・駅・徒歩分）",landArea:"土地面積（単位・公簿/実測の別も記載どおり）",bldgArea:"建物面積または専有面積",layout:"間取り",structure:"構造・階建・所在階",built:"築年月（例：2005年3月）",price:"売買価格（万円の数値。例 6450）",mgmtFee:"管理費 月額（円の数値）",income:"収益物件の満室想定年収・年間賃料収入（万円の数値。月額表記なら12倍。現況年収しかなければそれ）",repairFund:"修繕積立金 月額（円の数値）",rent:"賃料 月額（円の数値）",commonFee:"管理費・共益費 月額（円の数値）",deposit:"敷金（ヶ月数の数値）",keyMoney:"礼金（ヶ月数の数値）",guarantee:"保証会社に関する記載",rentInsurance:"火災保険料（円の数値）",keyChange:"鍵交換費（円の数値）",rentOther:"その他初期費用の合計（円の数値）",motoCompany:"元付業者（図面を作成した業者）の会社名。帯や枠に記載",motoBranch:"元付業者の支店・店舗名",motoTel:"元付業者TEL",motoFax:"元付業者FAX",motoPerson:"元付業者の担当者名",torihiki:"取引態様",commission:"手数料・分かれ等の条件",adOk:"広告転載の可否（例：広告可・承諾不要／広告不可／要承諾。記載がなければ空）",remarks:"その他重要事項の要約（用途地域・建ぺい率/容積率・接道・現況・引渡時期など、記載があるもののみ。150字以内）"};
 async function extractWithAI(){
   if(!st.pages.length) return;
   const sample=await sampler();
