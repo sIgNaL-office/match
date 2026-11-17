@@ -225,7 +225,8 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 .rv-mt i,.rv-bl i,.rv-lg i{display:inline-block;width:9px;height:9px;border-radius:3px}
 .rv-mv{font-size:21px;font-weight:900;color:#1d2a4d;margin-top:2px;font-variant-numeric:tabular-nums}.rv-mv small{font-size:10px;font-weight:500;margin-left:2px}
 .rv-mc.acc .rv-mv{color:#367069}
-.rv-ms{font-size:9px;color:#6b7a80;line-height:1.5;margin-top:2px}
+.rv-ms{font-size:8.8px;color:#5b6870;line-height:1.55;margin-top:3px;border-top:1px dashed #dfe7e8;padding-top:3px}
+.rv-mk{font-size:9px;color:#4a585e;margin-top:3px;line-height:1.45}
 .rv-hl{margin-top:10px;background:linear-gradient(90deg,#2b3864,#367069);color:#fff;border-radius:10px;padding:10px 14px;font-size:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .rv-hl b{font-size:17px;color:#fff}.rv-hl span{font-size:11px;opacity:.9}
 .rv-sec{font-size:12px;font-weight:700;color:#2b3864;margin-top:10px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.rv-sec small{font-weight:500;color:#6b7a80;font-size:9.5px}
@@ -236,7 +237,7 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 .rv-bv{font-size:16px;font-weight:900;text-align:right;color:#4a585e;font-variant-numeric:tabular-nums}.rv-bv small{font-size:9px;font-weight:500;margin-left:2px}.rv-bv.best{color:#367069}
 .rv-bs{grid-column:2/4;font-size:9px;color:#6b7a80}
 .rv-cols{display:grid;grid-template-columns:1.15fr 1fr;gap:12px;align-items:start}
-.sheet .rv-t{margin-top:4px}.sheet .rv-t td{padding:2.4px 5px;font-size:10px}
+.sheet .rv-t{margin-top:4px}.sheet .rv-t td{padding:2px 5px;font-size:10px}
 .rv-box{border:1px solid #dfe7e8;border-radius:10px;padding:7px 10px;margin-top:4px}.rv-box+.rv-box{margin-top:7px}
 .rv-bh{font-size:10.5px;font-weight:700;color:#367069;margin-bottom:3px}
 .rv-sn{display:flex;justify-content:space-between;font-size:9.8px;padding:1.5px 0;border-bottom:1px dashed #eef2f2}
@@ -244,6 +245,18 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 .rv-ov{position:fixed;inset:0;z-index:9999;background:rgba(20,28,48,.82);overflow:auto;padding:12px;display:flex;justify-content:center;align-items:flex-start}
 .rv-ovin{position:relative;flex:none;overflow:hidden}.rv-ovin .sheet{box-shadow:0 10px 40px rgba(0,0,0,.35)}
 .rv-x{position:fixed;top:10px;right:14px;z-index:10000;width:44px;height:44px;border-radius:50%;border:0;background:#fff;color:#2b3864;font-size:26px;line-height:44px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.tool-nav{position:sticky;top:0;z-index:30;background:var(--bg,#f4f6f7);padding:8px 0 10px;margin-bottom:6px}
+.tn-h{font-size:12px;font-weight:700;color:#6b7a80;letter-spacing:.1em;margin:0 2px 6px}
+.tn-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.tn-list button{display:flex;align-items:center;gap:8px;border:1px solid #dfe7e8;background:#fff;border-radius:10px;padding:9px 10px;font-size:13px;font-weight:700;color:#2b3864;cursor:pointer;text-align:left;line-height:1.3;font-family:inherit}
+.tn-list button span{flex:none;width:26px;height:26px;border-radius:7px;background:#eaf2ef;color:#367069;display:grid;place-items:center;font-size:14px}
+.tn-list button:hover,.tn-list button.on{border-color:#367069;background:#f1f8f5}
+.tool-anchor{scroll-margin-top:140px}
+.card.flash{animation:tnf 1.4s ease}
+@keyframes tnf{0%{box-shadow:0 0 0 3px #5fa877}100%{box-shadow:0 0 0 0 transparent}}
+#toolUp{position:fixed;right:16px;bottom:18px;z-index:50;border:0;border-radius:999px;background:#2b3864;color:#fff;font-weight:700;font-size:13px;padding:11px 16px;box-shadow:0 4px 14px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:.2s;font-family:inherit}
+#toolUp.show{opacity:1;pointer-events:auto}
+@media (max-width:700px){.tn-list{display:flex;overflow-x:auto;gap:6px;padding-bottom:2px;scrollbar-width:none}.tn-list::-webkit-scrollbar{display:none}.tn-list button{flex:none;padding:7px 10px;font-size:12.5px}.tn-list button span{width:22px;height:22px;font-size:12px}.tn-h{display:none}.tool-nav{padding:6px 0}}
 .f.fsec{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--teal,#367069);border-bottom:1px solid #dfe7e8;padding:8px 0 3px;margin-top:2px}
 .sheet .ln-bar{height:7px;background:#eef2f2;border-radius:4px;overflow:hidden}.sheet .ln-bar i{display:block;height:100%;background:linear-gradient(90deg,#2b3864,#367069)}
 /* 資金計画書 v2 */
@@ -1038,11 +1051,11 @@ function rvbCalc(v,over){
   for(let t=0;t<=H;t++){ series.A.push(net(A,t)); series.B.push(net(Bp,t,gainB)); series.C.push(net(C,t,gainC)); }
   let be=null; for(let t=1;t<=H;t++){ if(series.A[t]<series.B[t]){ be=t; break; } }
   const mA=A.m1.pay+mg0+taxY/12, mC=C.m1.pay+mg0*Math.pow(1+mgG,W)+taxY/12;
-  return {H,X,W,A,B:Bp,C,series,be,mA,mC,rent0,price,r,rC,yrs,age,g,termA:A.m1.term,termC:C.m1.term,gainB,cash0,sellCost};
+  return {H,X,W,A,B:Bp,C,series,be,mA,mC,mgW:mg0*Math.pow(1+mgG,W),rent0,price,r,rC,yrs,age,g,termA:A.m1.term,termC:C.m1.term,gainB,cash0,sellCost};
 }
 const RVB_COL={A:"#367069",B:"#9aa5ab",C:"#2b3864"};
 function rvbChart(c){
-  const W=700,H=230,L=58,R=14,T=14,Bm=26, xs=t=>L+(W-L-R)*(t/c.H);
+  const W=700,H=188,L=58,R=14,T=14,Bm=24, xs=t=>L+(W-L-R)*(t/c.H);
   const all=[...c.series.A,...c.series.B,...c.series.C].slice(1);
   let mx=Math.max(...all,1), mn=Math.min(0,...all);
   const step=[100,200,500,1000,2000,5000].map(s=>s*1e4).find(s=>(mx-mn)/s<=7)||1e8;
@@ -1110,9 +1123,9 @@ DOCS.rvb={ title:"賃貸・購入 比較", file:()=>`賃貸と購入の比較_${
         <div style="text-align:right"><div class="pl-cust" style="font-size:18px">${esc(v.cust||"　　　　")}<small>様</small></div><div class="pl-date">作成日 ${jDate(v.date)}</div></div>
       </div>
       <div class="rv-m">
-        <div class="rv-mc" style="border-color:${RVB_COL.B}"><div class="rv-mt"><i style="background:${RVB_COL.B}"></i>賃貸のまま</div><div class="rv-mv">${comma(Math.round(c.rent0))}<small>円/月</small></div><div class="rv-ms">家賃（管理費込み）${num(v.rentG)?`・年${num(v.rentG)}%上昇`:""}${num(v.renew)?`・更新料${num(v.renew)}ヶ月/2年`:""}</div></div>
-        <div class="rv-mc acc" style="border-color:${RVB_COL.A}"><div class="rv-mt"><i style="background:${RVB_COL.A}"></i>今買う</div><div class="rv-mv">${comma(Math.round(c.mA))}<small>円/月</small></div><div class="rv-ms">返済 ${comma(Math.round(c.A.m1.pay))}円＋管理費等・税（${c.r}%／${c.termA}年${ageTxt(c.termA,0)}）</div></div>
-        <div class="rv-mc" style="border-color:${RVB_COL.C}"><div class="rv-mt"><i style="background:${RVB_COL.C}"></i>${c.W}年貯めてから買う</div><div class="rv-mv">${comma(Math.round(c.mC))}<small>円/月</small></div><div class="rv-ms">${c.W}年間は家賃。頭金 ${man(c.C.m1.down)}万円・価格 ${man(c.C.m1.price)}万円（${c.rC}%／${c.termC}年${ageTxt(c.termC,c.W)}）</div></div>
+        <div class="rv-mc" style="border-color:${RVB_COL.B}"><div class="rv-mt"><i style="background:${RVB_COL.B}"></i>賃貸のまま</div><div class="rv-mk">毎月の家賃（管理費込み）</div><div class="rv-mv">${comma(Math.round(c.rent0))}<small>円/月</small></div><div class="rv-ms">${num(v.rentG)?`家賃は年${num(v.rentG)}%上昇の想定`:"家賃は据え置きの想定"}${num(v.renew)?`<br>更新料 ${num(v.renew)}ヶ月分（2年ごと）`:""}<br>ずっと家賃を払い続けます</div></div>
+        <div class="rv-mc acc" style="border-color:${RVB_COL.A}"><div class="rv-mt"><i style="background:${RVB_COL.A}"></i>今買う</div><div class="rv-mk">1年目からの毎月の住居費</div><div class="rv-mv">${comma(Math.round(c.mA))}<small>円/月</small></div><div class="rv-ms">内訳：返済 ${comma(Math.round(c.A.m1.pay))}＋管理費等 ${comma(Math.round(num(v.mg)))}＋固定資産税等 ${comma(Math.round(num(v.taxY)/12))}<br>価格 ${man(c.A.m1.price)}万円・頭金 ${man(c.A.m1.down)}万円・借入 ${man(c.A.m1.loan)}万円<br>${c.r}%・${c.termA}年${ageTxt(c.termA,0)}</div></div>
+        <div class="rv-mc" style="border-color:${RVB_COL.C}"><div class="rv-mt"><i style="background:${RVB_COL.C}"></i>${c.W}年貯めてから買う</div><div class="rv-mk">1〜${c.W}年目は家賃 ${comma(Math.round(c.rent0))}円＋貯金 ${comma(Math.round(num(v.save)))}円<br>${c.W+1}年目（購入後）からの毎月の住居費</div><div class="rv-mv">${comma(Math.round(c.mC))}<small>円/月</small></div><div class="rv-ms">内訳：返済 ${comma(Math.round(c.C.m1.pay))}＋管理費等 ${comma(Math.round(c.mgW))}＋固定資産税等 ${comma(Math.round(num(v.taxY)/12))}<br>${c.W}年後の価格 ${man(c.C.m1.price)}万円・頭金 ${man(c.C.m1.down)}万円（${man(num(v.down)*1e4)}万円＋貯金${comma(Math.round(num(v.save)/1e4*10)/10)}万円×${c.W*12}ヶ月）・借入 ${man(c.C.m1.loan)}万円<br>${c.rC}%・${c.termC}年${ageTxt(c.termC,c.W)}</div></div>
       </div>
       <div class="rv-hl">${head}<span>${sub2}</span></div>
       <div class="rv-sec">${X}年後に売却した場合の「実質負担」<small>＝ 住まいに払ったお金の合計 − 売却して手元に戻るお金</small></div>
@@ -2082,6 +2095,25 @@ function viewTools(v){
   // cover
   bindDocForm("cover",()=>paintPreview("cover")); paintPreview("cover");
   $("#cvDl").onclick=()=>downloadDocs(["cover"],DOCS.cover.file());
+  buildToolNav(v);
+}
+function buildToolNav(v){
+  const cards=$$(".tool-grid > .card",v); if(!cards.length) return;
+  const ICON={"仲介手数料":"¥","住宅ローン金利":"％","利回り":"📈","賃貸と購入":"⚖","返済計画表":"📅","借入可能額":"🏦","紹介文":"✍","送付状":"✉"};
+  const items=cards.map((c,i)=>{ const h=c.querySelector("h3"); const t=(h.childNodes[0].textContent||"").trim().replace(/^今月の/,""); c.id="tool_"+i; c.classList.add("tool-anchor");
+    const ic=Object.keys(ICON).find(k=>t.includes(k)); return {i,t,ic:ic?ICON[ic]:"•"}; });
+  const nav=document.createElement("nav"); nav.className="tool-nav";
+  nav.innerHTML=`<div class="tn-h">便利ツール</div><div class="tn-list">${items.map(x=>`<button data-i="${x.i}"><span>${x.ic}</span>${esc(x.t)}</button>`).join("")}</div>`;
+  v.insertBefore(nav,v.firstChild);
+  const setTop=()=>{ const h=document.querySelector("header"); nav.style.top=(h&&getComputedStyle(h).position==="sticky"?h.offsetHeight:0)+"px"; }; setTop(); removeEventListener("resize",window.__tnR||(()=>{})); window.__tnR=setTop; addEventListener("resize",setTop);
+  nav.onclick=e=>{ const b=e.target.closest("button[data-i]"); if(!b) return; const c=$("#tool_"+b.dataset.i); if(!c) return;
+    const y=c.getBoundingClientRect().top+scrollY-(nav.offsetHeight+(document.querySelector(".top,header")?.offsetHeight||0)+10);
+    scrollTo({top:Math.max(0,y),behavior:"smooth"}); c.classList.remove("flash"); void c.offsetWidth; c.classList.add("flash");
+    $$("button",nav).forEach(x=>x.classList.toggle("on",x===b)); };
+  let up=$("#toolUp"); if(!up){ up=document.createElement("button"); up.id="toolUp"; up.textContent="▲ 目次"; document.body.appendChild(up); }
+  up.onclick=()=>scrollTo({top:0,behavior:"smooth"});
+  const onS=()=>{ const show=st.tab==="tools"&&scrollY>500; up.classList.toggle("show",show); };
+  removeEventListener("scroll",window.__tnS||(()=>{})); window.__tnS=onS; addEventListener("scroll",onS,{passive:true}); onS();
 }
 
 /* ---------- 金利リスト ---------- */
