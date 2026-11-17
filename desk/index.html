@@ -285,6 +285,10 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 .bb-btns{display:flex;flex-wrap:wrap;gap:4px}.bb-btns .btn{padding:4px 8px;font-size:11.5px}
 .bb-src{align-self:flex-start;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:#fff;color:#6b7a80}
 .bb-src.auto{background:#eaf2ef;color:#367069}.bb-src.man{background:#2b3864;color:#fff}
+#bandPv .bb-item.one{width:100%;max-width:900px;background:transparent;padding:0}
+#bandPv .bb-item.one .bb-ctl{background:#fff;border-radius:10px;padding:8px 12px;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 14px}
+#bandPv .bb-item.one .bb-ctl label{gap:8px;white-space:nowrap}
+#bandPv .bb-item.one .bb-ctl input[type=range]{flex:1;min-width:160px;width:auto}
 .f.fsec{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--teal,#367069);border-bottom:1px solid #dfe7e8;padding:8px 0 3px;margin-top:2px}
 .sheet .ln-bar{height:7px;background:#eef2f2;border-radius:4px;overflow:hidden}.sheet .ln-bar i{display:block;height:100%;background:linear-gradient(90deg,#2b3864,#367069)}
 /* 資金計画書 v2 */
@@ -1928,12 +1932,12 @@ function viewBand(v){
     <div class="panel"><div class="card"><h3>sIgNaLの帯に差し替え</h3>
       <div class="grid" style="grid-template-columns:1fr 1fr" id="bandForm">
         <div class="f"><label>帯の位置</label><select data-b="bandPos"><option value="bottom">下</option><option value="top">上</option><option value="custom">任意の位置</option></select></div>
-        <div class="f"><label>帯の高さ（ページに対する％）</label><input data-b="bandPct" type="range" min="6" max="20" step="0.5"><span class="unit" id="pctLbl"></span></div>
+        <div class="f"><label>帯の高さ（基準・業者帯が見つからない図面用）</label><input data-b="bandPct" type="range" min="6" max="20" step="0.5"><span class="unit" id="pctLbl"></span></div>
         <div class="f"><label>取引態様</label><select data-b="torihiki"><option>媒介</option><option>一般媒介</option><option>専任媒介</option><option>専属専任媒介</option><option>代理</option><option>売主</option><option>貸主</option></select></div>
         <div class="f"><label>担当</label><select data-b="staffIdx">${staffOpts().map(([i,n])=>`<option value="${i}">${esc(n)}</option>`).join("")}</select></div>
         <div class="f wide"><label>出力ページ</label><select data-b="bandPages"><option value="sel">選択中のページのみ（複数物件のPDF向け）</option><option value="all">全ページ（すべて帯替え）</option></select></div>
       </div>
-      <div id="adWarn"></div><p class="note">元の業者帯の上に重ねて隠します。帯が真ん中にある図面（両面マイソク等）は、プレビューの元の帯の位置をタップすると、そこに移動します。元の帯がはみ出す場合は高さを上げてください。会社情報・ロゴは「設定」タブで変更できます。</p>
+      <div id="adWarn"></div><label class="f chk" style="margin:4px 0 0;display:flex;gap:8px;align-items:center"><input type="checkbox" id="bandAuto"><span style="font-size:13px;color:var(--ink)">業者帯を自動で見つけて、ページごとに帯の高さを合わせる</span></label><p class="note">元の業者帯の上に重ねて隠します。ページごとの高さ・位置は、右のプレビューの下にある「帯の高さ」「▲上へ／▼下へ」で1枚ずつ微調整できます（ほかのページは動きません）。プレビューをタップすると、その位置に帯を移動します。会社情報・ロゴは「設定」タブで変更できます。</p>
       <div class="row"><button class="btn" id="bandDl">帯替えPDFをダウンロード</button><button class="btn ghost hide" id="bandToBatch">全ページを「まとめて帯替え」で1枚ずつ調整</button></div>
       <div class="status" id="bandStatus"></div>
     </div></div>
@@ -1957,6 +1961,7 @@ function viewBand(v){
   $$("#bandForm [data-b]").forEach(el=>{ el.value=SET[el.dataset.b]; el.addEventListener("input",()=>{ SET[el.dataset.b]=el.type==="range"?num(el.value):el.value; if(el.dataset.b==="staffIdx")SET.staffIdx=num(el.value); saveSettings(); paintBand(); paintBatch(); }); });
   $("#bandDl").onclick=downloadBand;
   paintBand(); bindBatch();
+  const ba=$("#bandAuto"); ba.checked=SET.bbAuto!==false; ba.onchange=()=>{ SET.bbAuto=ba.checked; saveSettings(); paintBand(); paintBatch(); const b2=$("#bbAuto"); if(b2) b2.checked=ba.checked; };
   const tb=$("#bandToBatch"); tb.classList.toggle("hide",!(st.file&&st.pages.length>1));
   tb.onclick=()=>{ addBatch([st.file]); $("#bbCard").scrollIntoView({behavior:"smooth",block:"start"}); };
 }
@@ -2002,24 +2007,27 @@ async function drawBand(srcCanvas,ov){
 }
 let bandPainting=0;
 function bandIdx(){ return SET.bandPages==="all"? st.pages.map((_,i)=>i) : [Math.min(st.sel,st.pages.length-1)]; }
+function singleIt(){
+  if(st._autoFor!==st.pages){ st._autoFor=st.pages; st.bandOv={}; st.bandAuto=st.pages.map(p=>{ try{return detectBand(p)}catch(e){return null} }); }
+  return {pages:st.pages, ov:st.bandOv, auto:st.bandAuto, name:st.fileName||"図面"};
+}
 async function paintBand(){
   const box=$("#bandPv"); if(!box) return; $("#pctLbl")&&($("#pctLbl").textContent=SET.bandPct+"%");
   if(!st.pages.length) return;
-  const my=++bandPainting; await document.fonts.ready;
-  const idx=bandIdx(); const out=[]; for(const i of idx) out.push(await drawBand(st.pages[i]));
-  if(my!==bandPainting) return;
+  const my=++bandPainting; await document.fonts.ready; if(my!==bandPainting) return;
   const w=$("#adWarn"); if(w) w.innerHTML=/不可|禁止|要承諾|要確認/.test(st.P.adOk||"")?`<div class="status show err">図面の広告転載表記：「${esc(st.P.adOk)}」— 帯替え・転載前に元付へ確認してください。</div>`:"";
-  box.innerHTML=""; out.forEach(c=>{ c.className="bandpv"; c.style.cursor="crosshair"; c.title="タップした位置に帯を移動";
-    c.onclick=e=>{ const r=c.getBoundingClientRect(); const yPct=(e.clientY-r.top)/r.height*100; SET.bandPos="custom"; SET.bandY=Math.round((yPct-num(SET.bandPct)/2)*10)/10; saveSettings(); const sel=$('[data-b="bandPos"]'); if(sel) sel.value="custom"; paintBand(); };
-    box.appendChild(c); });
+  const it=singleIt(); box.innerHTML="";
+  for(const pi of bandIdx()){ if(my!==bandPainting) return;
+    const el=bbItemEl(it,pi,null,st.pages.length>1?`${pi+1}ページ目`:"プレビュー"); el.classList.add("one"); box.appendChild(el); await bbDrawItem(el,it,pi,900); }
 }
 async function downloadBand(){
   if(!st.pages.length) return toast("先にマイソクを読み込んでください");
   setBandStatus("PDFを作成中…");
   try{
     const {jsPDF}=window.jspdf; let pdf=null;
+    const it=singleIt();
     for(const i of bandIdx()){
-      const c=await drawBand(st.pages[i]);
+      const c=await drawBand(st.pages[i],bbOv(it,i));
       const land=c.width>c.height; const pw=land?297:210, ph=land?210:297;
       if(!pdf) pdf=new jsPDF({orientation:land?"l":"p",unit:"mm",format:"a4"}); else pdf.addPage("a4",land?"l":"p");
       const r=Math.min(pw/c.width,ph/c.height); const w=c.width*r,h=c.height*r;
@@ -2067,7 +2075,7 @@ function bindBatch(){
   ["dragleave","drop"].forEach(t=>d.addEventListener(t,e=>{e.preventDefault();d.classList.remove("on")}));
   d.addEventListener("drop",e=>addBatch([...e.dataTransfer.files]));
   $("#bbPages").onchange=paintBatch;
-  $("#bbAuto").checked=SET.bbAuto!==false; $("#bbAuto").onchange=e=>{ SET.bbAuto=e.target.checked; saveSettings(); paintBatch(); };
+  $("#bbAuto").checked=SET.bbAuto!==false; $("#bbAuto").onchange=e=>{ SET.bbAuto=e.target.checked; saveSettings(); paintBatch(); paintBand(); const b2=$("#bandAuto"); if(b2) b2.checked=e.target.checked; };
   $("#bbClear").onclick=()=>{ st.batch=[]; paintBatch(); bbStatus(""); };
   $("#bbDl").onclick=downloadBatch;
   paintBatch();
@@ -2093,27 +2101,18 @@ function bbOv(it,pi){
 }
 function bbEff(it,pi){ const o=bbOv(it,pi)||{}; return {pos:o.pos||SET.bandPos, pct:num(o.pct!=null?o.pct:SET.bandPct), y:o.y!=null?o.y:num(SET.bandY)}; }
 function bbSet(it,pi,patch){ const e=bbEff(it,pi); it.ov[pi]=Object.assign({pos:e.pos,pct:e.pct,y:e.pos==="custom"?e.y:(e.pos==="top"?0:100-e.pct)},patch); }
-async function bbDrawItem(el,it,pi){
-  const c=await drawBand(it.pages[pi],bbOv(it,pi)); const r=300/c.width; const t=el.querySelector("canvas");
-  t.width=300; t.height=Math.round(c.height*r); t.getContext("2d").drawImage(c,0,0,t.width,t.height);
+async function bbDrawItem(el,it,pi,pw){
+  pw=pw||+el.dataset.pw||300; el.dataset.pw=pw;
+  const c=await drawBand(it.pages[pi],bbOv(it,pi)); const r=pw/c.width; const t=el.querySelector("canvas");
+  t.width=pw; t.height=Math.round(c.height*r); t.getContext("2d").drawImage(c,0,0,t.width,t.height);
   const e=bbEff(it,pi), src=it.ov[pi]?"手動で調整":(SET.bbAuto!==false&&it.auto&&it.auto[pi]?"自動（業者帯を検出）":"全体の設定");
   el.querySelector(".bb-src").textContent=src; el.querySelector(".bb-src").className="bb-src "+(it.ov[pi]?"man":src.startsWith("自動")?"auto":"");
   el.querySelector(".bb-pct").value=e.pct; el.querySelector(".bb-pv").textContent=e.pct+"%";
   el.querySelector(".bb-reset").classList.toggle("hide",!it.ov[pi]);
 }
-let bbPainting=0;
-async function paintBatch(){
-  const box=$("#bbList"); if(!box) return; const my=++bbPainting;
-  $("#bbDl").disabled=!st.batch.length;
-  if(!st.batch.length){ box.innerHTML=""; return; }
-  await document.fonts.ready;
-  const total=st.batch.reduce((a,it)=>a+bbIdx(it).length,0);
-  box.innerHTML=`<div class="muted" style="grid-column:1/-1">${st.batch.length}ファイル・${total}ページ</div>`;
-  for(let fi=0;fi<st.batch.length;fi++){ const it=st.batch[fi];
-    for(const pi of bbIdx(it)){
-      if(my!==bbPainting) return;
+function bbItemEl(it,pi,onRemove,title){
       const el=document.createElement("div"); el.className="bb-item";
-      el.innerHTML=`<div class="bb-h"><span title="${esc(it.name)}">${esc(it.name)}${it.pages.length>1?`　p.${pi+1}`:""}</span><button class="bb-x" title="このファイルを外す">×</button></div>
+      el.innerHTML=`<div class="bb-h"><span title="${esc(title)}">${esc(title)}</span><button class="bb-x" title="このファイルを外す">×</button></div>
         <canvas class="bandpv" style="cursor:crosshair" title="タップした位置にこの図面の帯を移動"></canvas>
         <div class="bb-ctl"><span class="bb-src"></span>
           <label>帯の高さ <b class="bb-pv"></b></label><input type="range" class="bb-pct" min="5" max="30" step="0.5">
@@ -2127,7 +2126,21 @@ async function paintBatch(){
       el.querySelectorAll("[data-mv]").forEach(b=>b.onclick=()=>{ const e=bbEff(it,pi); const y0=e.pos==="custom"?e.y:(e.pos==="top"?0:100-e.pct);
         bbSet(it,pi,{pos:"custom",y:Math.max(0,Math.min(100-e.pct,Math.round((y0+num(b.dataset.mv))*10)/10))}); bbDrawItem(el,it,pi); });
       el.querySelector(".bb-reset").onclick=()=>{ delete it.ov[pi]; bbDrawItem(el,it,pi); };
-      el.querySelector(".bb-x").onclick=()=>{ st.batch.splice(fi,1); paintBatch(); };
+      if(onRemove) el.querySelector(".bb-x").onclick=onRemove; else el.querySelector(".bb-x").remove();
+  return el;
+}
+let bbPainting=0;
+async function paintBatch(){
+  const box=$("#bbList"); if(!box) return; const my=++bbPainting;
+  $("#bbDl").disabled=!st.batch.length;
+  if(!st.batch.length){ box.innerHTML=""; return; }
+  await document.fonts.ready;
+  const total=st.batch.reduce((a,it)=>a+bbIdx(it).length,0);
+  box.innerHTML=`<div class="muted" style="grid-column:1/-1">${st.batch.length}ファイル・${total}ページ</div>`;
+  for(let fi=0;fi<st.batch.length;fi++){ const it=st.batch[fi];
+    for(const pi of bbIdx(it)){
+      if(my!==bbPainting) return;
+      const el=bbItemEl(it,pi,()=>{ st.batch.splice(fi,1); paintBatch(); }, `${it.name}${it.pages.length>1?`　p.${pi+1}`:""}`);
       box.appendChild(el); await bbDrawItem(el,it,pi);
       await new Promise(r=>setTimeout(r,0));
     }
@@ -2586,7 +2599,7 @@ async function downloadDocs(ids,filename){
   try{
     const {jsPDF}=window.jspdf; const pdf=new jsPDF({unit:"mm",format:"a4"});
     for(let i=0;i<ids.length;i++){ const id=ids[i];
-      if(id==="__band"){ const bi=bandIdx(); for(let j=0;j<bi.length;j++){ const c=await drawBand(st.pages[bi[j]]); const land=c.width>c.height; if(i||j) pdf.addPage("a4",land?"l":"p"); else if(land){ pdf.deletePage(1); pdf.addPage("a4","l"); }
+      if(id==="__band"){ const bi=bandIdx(); for(let j=0;j<bi.length;j++){ const c=await drawBand(st.pages[bi[j]],bbOv(singleIt(),bi[j])); const land=c.width>c.height; if(i||j) pdf.addPage("a4",land?"l":"p"); else if(land){ pdf.deletePage(1); pdf.addPage("a4","l"); }
           const pw=land?297:210,ph=land?210:297,r=Math.min(pw/c.width,ph/c.height); pdf.addImage(c.toDataURL("image/jpeg",0.92),"JPEG",(pw-c.width*r)/2,(ph-c.height*r)/2,c.width*r,c.height*r); } continue; }
       const c=await renderSheetCanvas(id); if(i) pdf.addPage("a4","p"); pdf.addImage(c.toDataURL("image/jpeg",0.93),"JPEG",0,0,210,297);
     }
