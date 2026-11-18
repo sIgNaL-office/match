@@ -289,6 +289,10 @@ canvas.bandpv{max-width:100%;box-shadow:0 2px 14px rgba(0,0,0,.15);background:#f
 #bandPv .bb-item.one .bb-ctl{background:#fff;border-radius:10px;padding:8px 12px;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 14px}
 #bandPv .bb-item.one .bb-ctl label{gap:8px;white-space:nowrap}
 #bandPv .bb-item.one .bb-ctl input[type=range]{flex:1;min-width:160px;width:auto}
+.ln-text{width:100%;min-height:420px;font-size:13.5px;line-height:1.65;border:1px solid var(--line);border-radius:10px;padding:12px;background:#f7fbf8;font-family:inherit;resize:vertical;color:var(--ink)}
+.ln-ck{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);cursor:pointer}
+.in-park{margin-top:8px;border:1px dashed #9cc3b4;border-radius:10px;padding:8px 14px;display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;font-size:11px;color:#33424a}
+.in-park b{color:#2b3864;font-size:11.5px}.in-pt{margin-left:auto;font-weight:700;color:#367069}
 .f.fsec{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--teal,#367069);border-bottom:1px solid #dfe7e8;padding:8px 0 3px;margin-top:2px}
 .sheet .ln-bar{height:7px;background:#eef2f2;border-radius:4px;overflow:hidden}.sheet .ln-bar i{display:block;height:100%;background:linear-gradient(90deg,#2b3864,#367069)}
 /* 資金計画書 v2 */
@@ -754,6 +758,7 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
     {k:"date",label:"作成日",type:"date",def:today()},
     {k:"staff",label:"担当",type:"select",opts:staffOpts(),def:String(SET.staffIdx)},
     {k:"moveIn",label:"契約開始（入居）日",type:"date",def:()=>addDays(today(),14)},
+    {k:"tbd",label:"契約開始日が未定（日割り家賃は別途でご案内）",type:"check",def:false},
     {k:"rent",label:"賃料",unit:"円",type:"number",def:()=>st.P.rent||""},
     {k:"common",label:"管理費・共益費",unit:"円",type:"number",def:()=>st.P.commonFee||0},
     {k:"deposit",label:"敷金",unit:"ヶ月",type:"number",def:()=>st.P.deposit||0},
@@ -761,6 +766,7 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
     {k:"nextMonth",label:"翌月分の前家賃を含める",type:"check",def:true},
     {k:"brokerM",label:"仲介手数料",unit:"ヶ月（税別）",type:"number",def:1},
     {k:"guarPct",label:"保証会社 初回保証料",unit:"％（月額総賃料に対し）",type:"number",def:50},
+    {k:"guarYen",label:"初回保証料を金額で指定（任意）",unit:"円（入れると％より優先）",type:"number",def:""},
     {k:"insurance",label:"火災保険料",unit:"円",type:"number",def:()=>st.P.rentInsurance||20000},
     {k:"keyChange",label:"鍵交換費",unit:"円",type:"number",def:()=>st.P.keyChange||22000},
     {k:"other1n",label:"その他① 名称",def:()=>num(st.P.rentOther)?"その他初期費用":"室内消毒・抗菌"},
@@ -768,6 +774,9 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
     {k:"other2n",label:"その他② 名称",def:""},
     {k:"other2",label:"その他②",unit:"円",type:"number",def:0},
     {k:"freeRent",label:"フリーレント",unit:"ヶ月",type:"number",def:0},
+    {k:"parkFee",label:"駐車場 月額（任意）",unit:"円",type:"number",def:0},
+    {k:"parkDep",label:"駐車場 敷金",unit:"ヶ月",type:"number",def:0},
+    {k:"parkIncl",label:"駐車場を初期費用の合計に含める（含めない場合は「ご利用の場合」として別記）",type:"check",def:false},
     {k:"memo",label:"備考",type:"textarea",def:"※金額は概算です。貸主・管理会社の条件により変動する場合があります。"},
   ],
   calc(v){
@@ -777,17 +786,19 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
     const fr=num(v.freeRent);
     rows.push(["敷金",rent*num(v.deposit),`賃料×${num(v.deposit)}ヶ月（退去時に精算）`,"dep"]);
     rows.push(["礼金",Math.round(rent*num(v.keyMoney)),`賃料×${num(v.keyMoney)}ヶ月`,"fee"]);
-    rows.push(["日割家賃・管理費",fr?0:prorate, md?`${md}（${days}日分）`:"","rent"]);
+    if(!v.tbd) rows.push(["日割家賃・管理費",fr?0:prorate, md?`${md}（${days}日分）`:"","rent"]);
     if(v.nextMonth) rows.push(["翌月分家賃・管理費",fr>=1?0:m,"前家賃1ヶ月分","rent"]);
     rows.push(["仲介手数料",Math.round(rent*num(v.brokerM)*1.1),`賃料×${num(v.brokerM)}ヶ月＋消費税`,"fee"]);
-    rows.push(["保証会社 初回保証料",Math.round(m*num(v.guarPct)/100),`月額総賃料×${num(v.guarPct)}%`+(st.P.guarantee?`（${st.P.guarantee}）`:""),"etc"]);
+    rows.push(["保証会社 初回保証料",num(v.guarYen)?num(v.guarYen):Math.round(m*num(v.guarPct)/100),(num(v.guarYen)?"":`月額総賃料×${num(v.guarPct)}%`)+(st.P.guarantee?`（${st.P.guarantee}）`:""),"etc"]);
     rows.push(["火災保険料",num(v.insurance),"2年契約目安","etc"]);
     rows.push(["鍵交換費",num(v.keyChange),"","etc"]);
     if(v.other1n&&num(v.other1)) rows.push([v.other1n,num(v.other1),"","etc"]);
     if(v.other2n&&num(v.other2)) rows.push([v.other2n,num(v.other2),"","etc"]);
-    rows=rows.filter(r=>r[1]||/敷金|礼金|仲介/.test(r[0]));
+    const pf=num(v.parkFee), pdM=num(v.parkDep), park={fee:pf,depM:pdM,dep:pf*pdM,total:pf?pf+pf*pdM:0};
+    if(pf&&v.parkIncl){ rows.push(["駐車場 月額（初月分）",pf,"駐車料金1ヶ月分","rent"]); if(pdM) rows.push(["駐車場 敷金",park.dep,`駐車料金×${pdM}ヶ月`,"dep"]); }
+    rows=rows.filter(r=>r[1]||/^(敷金|礼金|仲介)/.test(r[0]));
     const sum=k=>rows.filter(r=>r[3]===k).reduce((a,r)=>a+r[1],0);
-    return {rows,total:rows.reduce((a,r)=>a+r[1],0),m,rent,cm,cats:{rent:sum("rent"),dep:sum("dep"),fee:sum("fee"),etc:sum("etc")},days,md};
+    return {rows,total:rows.reduce((a,r)=>a+r[1],0),m,rent,cm,cats:{rent:sum("rent"),dep:sum("dep"),fee:sum("fee"),etc:sum("etc")},days,md,tbd:!!v.tbd,park,parkIncl:!!(pf&&v.parkIncl)};
   },
   render(v){
     const c=this.calc(v), s=staff(num(v.staff)), P=st.P;
@@ -805,13 +816,13 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
       <div class="pl-prop">
         <div style="flex:1"><div class="pl-kl">物件</div><div class="pl-pn">${esc(P.name||"　")}</div><div class="pl-pa">${esc(P.address||"")}</div>
           <div class="pl-pa">${esc([P.layout,P.bldgArea,P.access].filter(Boolean).join("　／　"))}</div></div>
-        <div class="pl-price"><div style="font-size:11px;opacity:.85">ご契約時のお支払い（概算）</div><div>${comma(c.total)}<small>円</small></div></div>
+        <div class="pl-price"><div style="font-size:11px;opacity:.85">ご契約時のお支払い（概算）</div><div>${comma(c.total)}<small>円${c.tbd?"＋日割り家賃":""}</small></div></div>
       </div>
       <div class="pl-kpis" style="grid-template-columns:repeat(4,1fr)">
         <div class="pl-kpi"><div class="pl-kl">賃料</div><div class="pl-kv">${comma(c.rent)}<small>円</small></div></div>
         <div class="pl-kpi"><div class="pl-kl">管理費・共益費</div><div class="pl-kv">${comma(c.cm)}<small>円</small></div></div>
         <div class="pl-kpi acc"><div class="pl-kl">毎月のお支払い</div><div class="pl-kv">${comma(c.m)}<small>円</small></div></div>
-        <div class="pl-kpi"><div class="pl-kl">ご入居日</div><div class="pl-kv" style="font-size:14px;white-space:nowrap">${esc(mv)}</div></div>
+        <div class="pl-kpi"><div class="pl-kl">ご入居日</div><div class="pl-kv" style="font-size:14px;white-space:nowrap">${c.tbd?"調整中":esc(mv)}</div></div>
       </div>
       <div class="in-sec">初期費用の内訳<small>合計 ${comma(c.total)}円${ratio?`（月額の約${ratio.toFixed(1)}ヶ月分）`:""}</small></div>
       <div class="in-bar">${CAT.map(([k,,col])=>c.cats[k]?`<div style="width:${pct(c.cats[k]).toFixed(2)}%;background:${col}"></div>`:"").join("")}</div>
@@ -821,12 +832,14 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
           return `<div class="in-g"><div class="in-gh" style="border-color:${col}"><span>${l}</span><b>${comma(c.cats[k])}<small>円</small></b></div>
             ${rs.map(r=>`<div class="in-r"><div><div class="in-rl">${esc(r[0])}</div>${r[2]?`<div class="in-rn">${esc(r[2])}</div>`:""}</div><div class="in-ra">${comma(r[1])}<small>円</small></div></div>`).join("")}</div>`; }).join("")}
       </div>
-      <div class="in-total"><span>初期費用 合計</span><b>${comma(c.total)}<small>円</small></b></div>
+      <div class="in-total"><span>初期費用 合計</span><b>${comma(c.total)}<small>円${c.tbd?"＋日割り家賃":""}</small></b></div>
+      ${c.tbd?`<div class="in-free">※日割り家賃は契約開始日が決まり次第ご案内します。</div>`:""}
+      ${c.park.fee&&!c.parkIncl?`<div class="in-park"><b>駐車場をご利用の場合</b><span>月額駐車料金 ${comma(c.park.fee)}円${c.park.dep?`／駐車場敷金（${c.park.depM}ヶ月分）${comma(c.park.dep)}円`:""}</span><span class="in-pt">追加 ${comma(c.park.total)}円 → 合計 ${comma(c.total+c.park.total)}円${c.tbd?"＋日割り家賃":""}</span></div>`:""}
       ${num(v.freeRent)?`<div class="in-free">フリーレント ${num(v.freeRent)}ヶ月 適用で試算しています</div>`:""}
       <div class="pl-steps" style="margin-top:12px">
         <div class="pl-step"><div class="pl-sn">1</div><div class="pl-st">お申込み・入居審査</div><div class="pl-sa" style="font-size:13px">審査結果のご連絡</div><div class="pl-sd">保証会社・貸主による審査があります</div></div>
         <div class="pl-step"><div class="pl-sn">2</div><div class="pl-st">ご契約時</div><div class="pl-sa">${comma(c.total)}<small style="font-size:10px">円</small></div><div class="pl-sd">上記の初期費用をお支払いいただきます</div></div>
-        <div class="pl-step"><div class="pl-sn">3</div><div class="pl-st">ご入居（${esc(mv)}）以降</div><div class="pl-sa">毎月 ${comma(c.m)}<small style="font-size:10px">円</small></div><div class="pl-sd">賃料・管理費等（${v.nextMonth?"翌月分まで初期費用に含みます":"支払日は契約書をご確認ください"}）</div></div>
+        <div class="pl-step"><div class="pl-sn">3</div><div class="pl-st">ご入居${c.tbd?"":`（${esc(mv)}）`}以降</div><div class="pl-sa">毎月 ${comma(c.m)}<small style="font-size:10px">円</small></div><div class="pl-sd">賃料・管理費等（${v.nextMonth?"翌月分まで初期費用に含みます":"支払日は契約書をご確認ください"}）</div></div>
       </div>
       <div class="pl-note">${nl2br(v.memo)}${v.memo?"<br>":""}※敷金は退去時に原状回復費用等を差し引いて精算されます。保証料・保険料・鍵交換費は会社・プランにより異なります。</div>
       ${footer(s)}
@@ -1905,19 +1918,65 @@ function viewDoc(v,id){
   const D=DOCS[id];
   let side="";
   if(id==="plan"){ side=`<div class="card"><h3>計算結果</h3><div class="kv" id="planKv"></div></div>`; }
+  if(id==="init"){ side=`<div class="card"><h3>LINE用の文面 <span class="tag">コピーしてそのまま送れます</span></h3>
+    <div class="row" style="gap:14px;flex-wrap:wrap;margin-bottom:8px"><label class="ln-ck"><input type="checkbox" id="lnEmoji" checked>絵文字</label><label class="ln-ck"><input type="checkbox" id="lnGreet" checked>宛名・あいさつ</label><label class="ln-ck"><input type="checkbox" id="lnSign">署名（会社名・担当）</label></div>
+    <textarea id="lnText" class="ln-text" readonly></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn" id="lnCopy">文面をコピー</button></div>
+    <p class="note">左の入力内容と連動します。駐車場は「駐車場 月額」を入れると「ご利用の場合」として別記されます。</p></div>`; }
   if(id==="naiken"){ side=`<div class="card"><h3>内見依頼書用にマイソクを読み込む</h3><p class="note" style="margin:0 0 8px">上部と同じ読込です。元付会社・支店・担当者を図面から拾って宛先に自動入力します。</p><button class="btn sm ghost" onclick="$('#file').click()">マイソクを選択</button></div>`; }
   v.innerHTML=`<div class="two">
     <div class="panel">
       <div class="card"><h3>${D.title}<span class="tag">黄色＝手入力 / 緑＝自動</span></h3>${docFormHTML(id)}
-        <div class="row" style="margin-top:12px"><button class="btn" id="dlBtn">PDFをダウンロード</button><button class="btn ghost sm" id="resetBtn">自動値に戻す</button></div>
+        <div class="row" style="margin-top:12px"><button class="btn" id="dlBtn">PDFをダウンロード</button><button class="btn ghost sm" id="resetBtn">自動値に戻す</button>${id==="init"?`<button class="btn ghost sm" id="lnJump">LINE用の文面へ ↓</button>`:""}</div>
       </div>${side}
     </div>
     <div class="pv-wrap">${previewHTML(id)}</div>
   </div>`;
-  const upd=()=>{ paintPreview(id); if(id==="plan") paintPlanKv(); };
+  const upd=()=>{ paintPreview(id); if(id==="plan") paintPlanKv(); if(id==="init") paintInitLine(); };
   bindDocForm(id,upd); upd();
   $("#dlBtn").onclick=()=>downloadDocs([id],D.file());
+  if(id==="init"){ $("#lnJump").onclick=()=>$("#lnText").scrollIntoView({behavior:"smooth",block:"center"}); ["lnEmoji","lnGreet","lnSign"].forEach(k=>$("#"+k).onchange=paintInitLine);
+    $("#lnCopy").onclick=async()=>{ const t=$("#lnText").value; try{ await navigator.clipboard.writeText(t); toast("コピーしました。LINEに貼り付けてください"); }catch(e){ const ta=$("#lnText"); ta.removeAttribute("readonly"); ta.select(); try{document.execCommand("copy"); toast("コピーしました");}catch(_){toast("文面を長押ししてコピーしてください");} ta.setAttribute("readonly",""); } }; }
   $("#resetBtn").onclick=()=>{ Object.keys(st.touched).filter(k=>k.startsWith(id+".")).forEach(k=>delete st.touched[k]); st.docs[id]={}; renderView(); };
+}
+
+/* ---- 初期費用：LINE用の文面 ---- */
+function initLineText(opt){
+  const v=docVals("init"), c=DOCS.init.calc(v), s=staff(num(v.staff)), P=st.P, E=opt.emoji;
+  const y=n=>`${comma(Math.round(n))}円`;
+  const lbl=r=>{ const n=r[0];
+    if(n==="日割家賃・管理費") return `日割り家賃${c.cm?"・管理費":""}${c.md?`（${c.md}・${c.days}日分）`:""}`;
+    if(n==="翌月分家賃・管理費") return c.cm?"翌月分の家賃・管理費（前家賃）":"翌月分の家賃（前家賃）";
+    if(n==="敷金") return num(v.deposit)?`敷金（${num(v.deposit)}ヶ月）`:"敷金";
+    if(n==="礼金") return num(v.keyMoney)?`礼金（${num(v.keyMoney)}ヶ月）`:"礼金";
+    if(n==="仲介手数料") return `仲介手数料（${num(v.brokerM)}ヶ月＋税）`;
+    return n; };
+  const groups=[["rent","家賃・管理費"],["dep","お預かりするお金（退去時に精算）"],["fee","ご契約にかかる費用"],["etc","保証・保険など"]];
+  const L=[];
+  if(opt.greet){ L.push(`${v.cust?v.cust+" 様":"お客様"}`,"",`お世話になっております。${SET.company}の${s.name.split(/\s/)[0]}です。`); }
+  L.push(`${P.name?`「${P.name}」の`:""}初期費用について、下記のとおりご案内いたします${E?"✨":"。"}`,"");
+  L.push(`${E?"🏠 ":""}【毎月のお支払い】`,`・賃料：${y(c.rent)}`);
+  if(c.cm) L.push(`・管理費・共益費：${y(c.cm)}`);
+  if(c.parkIncl) L.push(`・駐車場：${y(c.park.fee)}`);
+  L.push(`→ 月額合計：${y(c.m+(c.parkIncl?c.park.fee:0))}`,"");
+  L.push(`${E?"📝 ":""}【初期費用の内訳】`);
+  groups.forEach(([k,t])=>{ const rs=c.rows.filter(r=>r[3]===k); if(!rs.length) return; if(k==="dep"&&!c.cats.dep) t="お預かりするお金"; L.push(`＜${t}＞`); rs.forEach(r=>L.push(`・${lbl(r)}：${y(r[1])}`)); });
+  L.push("",`${E?"💰 ":"■"}初期費用 合計：${y(c.total)}${c.tbd?"＋日割り家賃":""}`);
+  if(c.tbd) L.push("※日割り家賃は契約開始日により変動いたします。");
+  if(num(v.freeRent)) L.push(`※フリーレント${num(v.freeRent)}ヶ月を適用した金額です。`);
+  if(c.park.fee&&!c.parkIncl){
+    L.push("",`${E?"🚗 ":""}【駐車場をご利用の場合】`,`・月額駐車料金：${y(c.park.fee)}`);
+    if(c.park.dep) L.push(`・駐車場敷金（${c.park.depM}ヶ月分）：${y(c.park.dep)}`);
+    L.push(`→ 追加費用：${y(c.park.total)}`,"",`駐車場もご契約される場合は、初期費用が合計 ${y(c.total+c.park.total)}${c.tbd?"＋日割り家賃":""} となります。`);
+  }
+  L.push("","※金額は概算です。貸主・管理会社の条件により変わる場合がございます。");
+  L.push(`ご不明な点があれば、お気軽にご連絡ください${E?"！🙇‍♂️":"。"}`);
+  if(opt.sign) L.push("",`${SET.company}`,`担当：${s.name}${s.mobile?`（${s.mobile}）`:""}`);
+  return L.join("\n");
+}
+function paintInitLine(){
+  const ta=$("#lnText"); if(!ta) return;
+  ta.value=initLineText({emoji:$("#lnEmoji").checked,greet:$("#lnGreet").checked,sign:$("#lnSign").checked});
 }
 function paintPlanKv(){
   const box=$("#planKv"); if(!box) return; const v=docVals("plan"); const c=DOCS.plan.calc(v);
