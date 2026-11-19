@@ -307,6 +307,35 @@ function newBanner(){
     <p class="sub" style="margin:2px 0 6px">前回アプリを開いてから、ほかの営業が「公開する」で登録した案件です。</p>
     <ul>${d.map(r => item(r, 'deal')).join('')}${n.map(r => item(r, 'need')).join('')}</ul></div>`;
 }
+/* ===== お知らせ（新着・価格変更など。サーバーの「お知らせ」シートから。見てよい案件の分だけ届く） ===== */
+function ntcList(){
+  if (S.ntcShow) return S.ntcShow; // 開いている間は同じ表示のまま
+  const key = 'sg_ntc_' + S.me.email;
+  let last = ls.get(key);
+  if (!last) { const d = new Date(Date.now() - 3 * 864e5); last = d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0') + ' 00:00'; } // 初回は直近3日分
+  const all = S.notices || [];
+  // 自分がアプリで登録しただけの「新着」は出さない。ほかの人の公開案件の新着は下の「新着の案件」と重なるので出さない
+  S.ntcShow = all.filter(n => String(n.at) > last && !(n.type === '新着' && n.mine && n.src !== 'メール') && !(n.type === '新着' && isNew({ id: n.recId })));
+  if (all.length) ls.set(key, all.map(n => String(n.at)).sort().pop());
+  return S.ntcShow;
+}
+// 一覧の印：直近7日の価格変更
+function recentNtc(r, type){
+  const lim = new Date(Date.now() - 7 * 864e5), d = lim.getFullYear() + '/' + String(lim.getMonth() + 1).padStart(2, '0') + '/' + String(lim.getDate()).padStart(2, '0');
+  return (S.notices || []).some(n => n.recId === r.id && n.type === type && String(n.at) >= d);
+}
+const ntcVal = (n, v) => v === '' || v == null ? '' : n.kind === 'deal' ? yen(v) : v + '万円';
+function noticeBanner(){
+  const list = ntcList();
+  if (!list.length || S.ntcClosed) return '';
+  const chip = t => `<span class="chip ${t === '価格変更' || t === '条件変更' ? 'need' : 'newc'}">${esc(t)}</span>`;
+  const item = n => `<li>${chip(n.type)} <a data-new="${esc(n.kind)}:${esc(n.recId)}">${esc(n.title || (n.kind === 'deal' ? '（物件名 要確認）' : '（顧客名 要確認）'))}</a> <span class="m">${esc([
+      n.type === '価格変更' || n.type === '条件変更' ? ntcVal(n, n.before) + ' → ' + ntcVal(n, n.after) : n.type === '情報更新' ? '追加：' + n.after : ntcVal(n, n.after),
+      '担当 ' + userName(n.owner), n.src === 'メール' ? 'メール取込' : '', String(n.at).slice(5, 16)].filter(Boolean).join('・'))}</span></li>`;
+  return `<div class="newbox"><div class="xhead"><b>お知らせ（${list.length}件）</b><button class="btn ghost sm" id="ntcx">閉じる</button></div>
+    <p class="sub" style="margin:2px 0 6px">前回アプリを開いてからの新着・価格変更です。</p>
+    <ul>${list.map(item).join('')}</ul></div>`;
+}
 /* ===== 進み具合・飛び込み ===== */
 // 進み具合（大きいほど進んでいる）。他決・見送り・終了など止まったものは一番下
 function prog(k, r){
@@ -343,7 +372,7 @@ function renderList(){
   const k = S.listKind;
   const rows = k === 'deal' ? S.deals : k === 'tobi' ? (S.tobis || []) : S.needs;
   const statuses = specs(k).find(s => s.k === 'status').o;
-  $('#app').innerHTML = newBanner() + staleBanner() + `<h1>案件一覧</h1>
+  $('#app').innerHTML = noticeBanner() + newBanner() + staleBanner() + `<h1>案件一覧</h1>
     <p class="sub">ランクはS〜Dの優先度です。「社内非公開」は担当者と管理者にだけ表示されます。</p>
     <div class="subtabs" role="tablist">
       <button role="tab" data-lk="deal" aria-selected="${k==='deal'}">売り情報（${S.deals.length}）</button>
@@ -360,6 +389,7 @@ function renderList(){
     <div class="list" id="rows"></div>`;
   document.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => { S.listKind = b.dataset.lk; renderList(); });
   const nx = $('#newx'); if (nx) nx.onclick = () => { S.newClosed = true; renderList(); };
+  const ntx = $('#ntcx'); if (ntx) ntx.onclick = () => { S.ntcClosed = true; renderList(); };
   document.querySelectorAll('[data-lv]').forEach(b => b.onclick = () => { S.mapView = b.dataset.lv === 'map'; renderList(); });
   if (S.mapObj) { S.mapObj.remove(); S.mapObj = null; } // 一覧を描き直したら地図も作り直す
   document.querySelectorAll('[data-new]').forEach(a => a.onclick = () => { const [kk, id] = a.dataset.new.split(':'); go('detail', { dkind: kk, did: id, dtab: kk === 'deal' ? 'gaiyo' : 'info' }); });
@@ -376,7 +406,7 @@ function renderList(){
     $('#rows').innerHTML = list.length ? list.map(r => k === 'tobi' ? tobiItem(r) : k === 'deal' ? `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
-        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${pubChip(r)}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
+        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${recentNtc(r, '価格変更') ? '<span class="chip need">価格変更</span>' : ''}${pubChip(r)}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
           <span class="m">${esc([r.shubetsu, '担当 ' + userName(r.owner), r.shoryu, '回答' + (S.respCount[r.id] || 0) + '件'].filter(Boolean).join('・'))}</span></span>
         <span class="price">${yen(r.price)}</span></button>` : `
       <button class="item" data-id="${esc(r.id)}">
