@@ -330,7 +330,7 @@ function noticeBanner(){
   if (!list.length || S.ntcClosed) return '';
   const chip = t => `<span class="chip ${t === '価格変更' || t === '条件変更' ? 'need' : 'newc'}">${esc(t)}</span>`;
   const item = n => `<li>${chip(n.type)} <a data-new="${esc(n.kind)}:${esc(n.recId)}">${esc(n.title || (n.kind === 'deal' ? '（物件名 要確認）' : '（顧客名 要確認）'))}</a> <span class="m">${esc([
-      n.type === '価格変更' || n.type === '条件変更' ? ntcVal(n, n.before) + ' → ' + ntcVal(n, n.after) : n.type === '情報更新' ? '追加：' + n.after : ntcVal(n, n.after),
+      n.type === '価格変更' || n.type === '条件変更' ? ntcVal(n, n.before) + ' → ' + ntcVal(n, n.after) : n.type === '情報更新' ? '空欄を' + String(n.after).split('・').filter(Boolean).length + '項目追加' : ntcVal(n, n.after),
       '担当 ' + userName(n.owner), n.src === 'メール' ? 'メール取込' : '', String(n.at).slice(5, 16)].filter(Boolean).join('・'))}</span></li>`;
   return `<div class="newbox"><div class="xhead"><b>お知らせ（${list.length}件）</b><button class="btn ghost sm" id="ntcx">閉じる</button></div>
     <p class="sub" style="margin:2px 0 6px">前回アプリを開いてからの新着・価格変更です。</p>
