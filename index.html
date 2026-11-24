@@ -1011,19 +1011,174 @@ function bindFiles(){ document.querySelectorAll('[data-fid]').forEach(a => a.onc
 
 function tabGaiyo(){
   const d = S.cur, r = d.rec;
-  $('#dbody').innerHTML = `<div class="row" style="margin-bottom:10px">
-      <button class="btn sm" id="mkpdf">PDFを作成</button>
-      ${r.pdf ? `<button class="btn ghost sm" id="dlpdf">前回作ったPDFをダウンロード</button>` : ''}
-      ${r.folder && S.me.admin ? `<a class="btn ghost sm" href="${esc(r.folder)}" target="_blank" rel="noopener">資料フォルダを開く</a>` : ''}
+  // まとめて出力できる資料（PDF・画像）。アプリが作った過去の概要書PDFは除く
+  const pdfId = (String(r.pdf || '').match(/\/d\/([\w-]+)/) || [])[1];
+  const okType = f => /pdf|^image\//.test(f.mimeType || '') || /\.(pdf|jpe?g|png|gif|webp|heic|heif)$/i.test(f.name || '');
+  const files = (d.files || []).filter(f => f.id !== pdfId && !/^物件概要書_/.test(f.name || ''));
+  const mode = S.pdfMode || 'only';
+  const kb = n => n ? (n > 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB') : '';
+  $('#dbody').innerHTML = `<div class="panel" style="margin-bottom:12px">
+      <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="seg" role="group" aria-label="PDFの出力内容"><button data-pm="only" aria-pressed="${mode === 'only'}">概要書のみ</button><button data-pm="bundle" aria-pressed="${mode === 'bundle'}">概要書＋資料をまとめる</button></div>
+        <button class="btn sm" id="mkpdf">PDFを作成</button>
+        ${r.pdf ? `<button class="btn ghost sm" id="dlpdf">前回作ったPDFをダウンロード</button>` : ''}
+        ${d.canEdit ? `<button class="btn ghost sm" id="mapedit">案内図に対象地の枠を描く</button>` : ''}
+        ${r.folder && S.me.admin ? `<a class="btn ghost sm" href="${esc(r.folder)}" target="_blank" rel="noopener">資料フォルダを開く</a>` : ''}
+      </div>
+      ${mode === 'bundle' ? `<div style="margin-top:10px">
+        <div class="sub" style="margin:0 0 4px">1ページ目に概要書、続けてチェックした資料を上から順に入れて1つのPDFにします（写真・画像もPDFのページになります）。</div>
+        ${files.length ? `<div class="row" style="gap:8px;margin-bottom:4px"><button class="btn ghost sm" id="bAll">すべて選ぶ</button><button class="btn ghost sm" id="bNone">すべて外す</button></div>
+        <div id="bfiles" style="display:flex;flex-direction:column;gap:2px;font-size:13px">${files.map(f => {
+          const ok = okType(f);
+          return `<label style="display:flex;gap:6px;align-items:center${ok ? '' : ';color:var(--muted)'}"><input type="checkbox" style="width:auto" value="${esc(f.id)}"${ok ? '' : ' disabled'}${ok && (S.pdfPick || {})[f.id] ? ' checked' : ''}>${esc(f.name)}<span class="m" style="color:var(--muted);font-size:11.5px">${kb(f.size)}${ok ? '' : '（PDF・画像以外は入れられません）'}</span></label>`;
+        }).join('')}</div>` : `<div class="note">資料フォルダにまとめられる資料がありません。「案件情報」から販売図面や写真を追加してください。</div>`}
+      </div>` : ''}
+      <div id="pdfprog" class="sub" style="margin:8px 0 0" hidden></div>
     </div>
     <p class="sub">${r.feeShow === 'はい' ? '仲介手数料を載せています。' : '仲介手数料は空欄です。載せる場合は「案件情報」の詳細項目で設定してください。'}「要確認」は資料から読み取れなかった必須項目です。</p>
     <div class="sheet-wrap"><div style="background:#fff">${d.overview}</div></div>`;
+  document.querySelectorAll('[data-pm]').forEach(b => b.onclick = () => { S.pdfMode = b.dataset.pm; tabGaiyo(); });
+  const pick = () => { S.pdfPick = {}; document.querySelectorAll('#bfiles input:checked').forEach(c => S.pdfPick[c.value] = 1); };
+  document.querySelectorAll('#bfiles input').forEach(c => c.onchange = pick);
+  if ($('#bAll')) $('#bAll').onclick = () => { document.querySelectorAll('#bfiles input:not([disabled])').forEach(c => c.checked = true); pick(); };
+  if ($('#bNone')) $('#bNone').onclick = () => { document.querySelectorAll('#bfiles input').forEach(c => c.checked = false); pick(); };
   $('#mkpdf').onclick = async e => {
-    const b = e.currentTarget; busy(b, true, 'PDFを作成中…');
-    try { const x = await api('makePdf', { id: r.id }); r.pdf = x.url; r.folder = r.folder || x.folder; tabGaiyo(); downloadFile($('#dlpdf'), ''); toast('PDFを作成しました。ダウンロードが始まらない場合は「前回作ったPDFをダウンロード」を押してください'); }
-    catch (err) { toast(err.message, 6000); busy(b, false); }
+    const b = e.currentTarget;
+    const chosen = mode === 'bundle' ? files.filter(f => (S.pdfPick || {})[f.id] && okType(f)) : [];
+    if (mode === 'bundle' && !chosen.length) { toast('まとめる資料にチェックを入れてください（概要書だけなら「概要書のみ」を選択）', 5000); return; }
+    busy(b, true, 'PDFを作成中…');
+    try {
+      const x = await api('makePdf', { id: r.id }); r.pdf = x.url; r.folder = r.folder || x.folder;
+      if (!chosen.length) { tabGaiyo(); downloadFile($('#dlpdf'), ''); toast('PDFを作成しました。ダウンロードが始まらない場合は「前回作ったPDFをダウンロード」を押してください'); return; }
+      const skipped = await bundlePdf(r, chosen, t => { const p = $('#pdfprog'); if (p) { p.hidden = false; p.textContent = t; } });
+      tabGaiyo();
+      toast(skipped.length ? 'PDFを作成しました。入れられなかった資料：' + skipped.join('、') : '概要書と資料をまとめたPDFを作成しました', skipped.length ? 8000 : 3500);
+    } catch (err) { toast(err.message, 6000); busy(b, false); const p = $('#pdfprog'); if (p) p.hidden = true; }
   };
   const dl = $('#dlpdf'); if (dl) dl.onclick = () => downloadFile(dl, '');
+  if ($('#mapedit')) $('#mapedit').onclick = () => mapEditor(d);
+}
+
+/* ===== 概要書＋資料を1つのPDFにまとめる（ブラウザの中で結合。写真はA4のページにする） ===== */
+function loadPdfLib(){
+  if (window.PDFLib) return Promise.resolve();
+  if (S.pdfLibP) return S.pdfLibP;
+  S.pdfLibP = new Promise((ok, ng) => {
+    const js = document.createElement('script'); js.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+    js.onload = ok; js.onerror = () => { S.pdfLibP = null; ng(new Error('PDFをまとめる部品を読み込めませんでした。電波の良いところでもう一度お試しください')); };
+    document.head.appendChild(js);
+  });
+  return S.pdfLibP;
+}
+const b64bytes = s => { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+// 画像をJPEGにそろえる（大きい写真は長辺2400pxに縮めて、PDFが重くなりすぎないように）
+function toJpeg(bytes, type){
+  return new Promise((ok, ng) => {
+    const url = URL.createObjectURL(new Blob([bytes], { type: type || 'image/jpeg' })), im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 2400 / Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? b.arrayBuffer().then(a => ok(new Uint8Array(a))) : ng(new Error('画像を変換できませんでした')), 'image/jpeg', 0.85);
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); ng(new Error('この形式の画像は読み込めません')); };
+    im.src = url;
+  });
+}
+async function bundlePdf(r, chosen, prog){
+  prog('PDFをまとめる準備中…');
+  await loadPdfLib();
+  const { PDFDocument } = window.PDFLib;
+  const out = await PDFDocument.create(), skipped = [];
+  const addPdf = async bytes => { const src = await PDFDocument.load(bytes, { ignoreEncryption: true }); (await out.copyPages(src, src.getPageIndices())).forEach(p => out.addPage(p)); };
+  prog('概要書を取り込んでいます…');
+  const ov = await api('fileData', { kind: 'deal', id: r.id, fileId: '' });
+  await addPdf(b64bytes(ov.data));
+  for (let i = 0; i < chosen.length; i++) {
+    const f = chosen[i];
+    prog(`資料を取り込んでいます（${i + 1}/${chosen.length}）：${f.name}`);
+    try {
+      const x = await api('fileData', { kind: 'deal', id: r.id, fileId: f.id });
+      const bytes = b64bytes(x.data), mt = x.mimeType || f.mimeType || '';
+      if (/pdf/.test(mt) || /\.pdf$/i.test(x.name || '')) { await addPdf(bytes); continue; }
+      const img = await out.embedJpg(await toJpeg(bytes, mt));
+      // A4（縦長の画像は縦、横長は横）。余白10mmで中央に収める
+      const land = img.width > img.height, W = land ? 841.89 : 595.28, H = land ? 595.28 : 841.89, m = 28.35;
+      const k = Math.min((W - m * 2) / img.width, (H - m * 2) / img.height), w = img.width * k, h = img.height * k;
+      out.addPage([W, H]).drawImage(img, { x: (W - w) / 2, y: (H - h) / 2, width: w, height: h });
+    } catch (e) { console.warn(f.name, e); skipped.push(f.name); }
+  }
+  prog('PDFを保存しています…');
+  const bytes = await out.save();
+  const day = new Date(), ymd = day.getFullYear() + ('0' + (day.getMonth() + 1)).slice(-2) + ('0' + day.getDate()).slice(-2);
+  const name = ('物件概要書_' + (r.title || r.id) + '_資料付き_' + ymd + '.pdf').replace(/[\\/:*?"<>|]/g, '_');
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  return skipped;
+}
+
+/* ===== 案内図に対象地の枠を描く（点を順にタップして囲む。点はドラッグで動かせる） =====
+   概要書の案内図は横640×縦160（Googleマップの静止画）。画面の赤い点線の枠が、概要書に載る範囲 */
+function mapEditor(d){
+  const r = d.rec, saved = (() => { try { return r.mapShape ? JSON.parse(r.mapShape) : null; } catch (e) { return null; } })();
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:12px';
+  box.innerHTML = `<div class="panel" style="width:min(900px,100%);max-height:100%;overflow:auto;background:var(--surface);border-radius:10px;padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>案内図に対象地の枠を描く</b><button class="btn ghost sm" id="me-x">閉じる</button></div>
+    <p class="sub" style="margin:6px 0 8px">対象地の角を順にタップすると赤枠で囲みます（点はドラッグで動かせます）。地図を動かして、<b>点線の枠</b>の中に対象地が入るようにしてください。点線の枠の範囲が概要書に載ります。</p>
+    <div style="position:relative"><div id="me-map" style="height:min(60vh,460px);min-height:300px;border:1px solid var(--line);border-radius:8px"></div>
+      <div id="me-frame" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border:2px dashed #2a3666;box-shadow:0 0 0 9999px rgba(255,255,255,.35);pointer-events:none;z-index:500"></div></div>
+    <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn ghost sm" id="me-undo">1点戻す</button><button class="btn ghost sm" id="me-clear">枠をすべて消す</button>
+      <span class="sub" id="me-n" style="margin:0"></span>
+      <span style="flex:1"></span><button class="btn sm" id="me-save">この枠で保存</button>
+    </div></div>`;
+  document.body.appendChild(box);
+  let m = null;
+  const close = () => { if (m) m.remove(); box.remove(); };
+  box.querySelector('#me-x').onclick = close;
+  box.addEventListener('click', e => { if (e.target === box) close(); });
+  loadLeaflet().then(() => {
+    const L = window.L, tile = (u, ext) => L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/' + u + '/{z}/{x}/{y}.' + ext, { maxZoom: 19, maxNativeZoom: 18, attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>' });
+    const base = { '地図': tile('std', 'png'), '淡色': tile('pale', 'png'), '写真': tile('seamlessphoto', 'jpg') };
+    const c0 = saved ? saved.c : d.geo || [35.68, 139.76];
+    m = L.map(box.querySelector('#me-map'), { layers: [base['地図']], zoomSnap: 1, doubleClickZoom: false }).setView(c0, saved ? Math.min(19, saved.z) : d.geo ? 18 : 12);
+    L.control.layers(base, null, { position: 'topright' }).addTo(m);
+    if (!saved && d.geo) L.circleMarker(d.geo, { radius: 5, color: '#2a3666', weight: 2, fillOpacity: .3, interactive: false }).addTo(m);
+    let pts = saved && saved.pts ? saved.pts.map(p => L.latLng(p[0], p[1])) : [];
+    const poly = L.polygon([], { color: '#e60012', weight: 3, fillColor: '#ff0000', fillOpacity: .35, interactive: false }).addTo(m);
+    const handles = L.layerGroup().addTo(m);
+    const icon = L.divIcon({ className: '', html: '<span style="display:block;width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #e60012"></span>', iconSize: [14, 14], iconAnchor: [7, 7] });
+    const draw = () => {
+      poly.setLatLngs(pts); handles.clearLayers();
+      pts.forEach((p, i) => { const h = L.marker(p, { icon: icon, draggable: true }).addTo(handles); h.on('drag', e => { pts[i] = e.target.getLatLng(); poly.setLatLngs(pts); }); });
+      box.querySelector('#me-n').textContent = pts.length ? pts.length + '点' + (pts.length < 3 ? '（3点以上で枠になります）' : '') : 'まだ枠がありません（このまま保存すると、住所の位置にピンを立てた地図になります）';
+    };
+    m.on('click', e => { pts.push(e.latlng); draw(); });
+    box.querySelector('#me-undo').onclick = () => { pts.pop(); draw(); };
+    box.querySelector('#me-clear').onclick = () => { pts = []; draw(); };
+    // 概要書の地図（640×160、整数ズーム）と同じ範囲を点線枠で示す。画面が狭いときは1段細かいズームで出す
+    const fr = box.querySelector('#me-frame'); let zs = 18;
+    const frame = () => {
+      const W = box.querySelector('#me-map').clientWidth - 24, ze = m.getZoom();
+      zs = Math.min(20, ze + (W >= 640 ? 0 : W >= 320 ? 1 : 2));
+      const fw = 640 / Math.pow(2, zs - ze);
+      fr.style.width = fw + 'px'; fr.style.height = fw / 4 + 'px';
+    };
+    m.on('zoomend resize', frame); frame(); draw();
+    box.querySelector('#me-save').onclick = async e => {
+      if (pts.length && pts.length < 3) { toast('枠は3点以上で囲んでください'); return; }
+      const b = e.currentTarget; busy(b, true, '保存中…');
+      const c = m.getCenter();
+      try {
+        const x = await api('saveMapShape', { id: r.id, shape: pts.length ? { c: [c.lat, c.lng], z: zs, pts: pts.map(p => [p.lat, p.lng]) } : null });
+        r.mapShape = x.mapShape; d.overview = x.overview; close(); tabGaiyo();
+        toast(pts.length ? '案内図に枠を入れました。PDFを作り直すと反映されます' : '枠を消しました');
+      } catch (err) { toast(err.message, 6000); busy(b, false); }
+    };
+  }).catch(err => { toast(err.message, 6000); close(); });
 }
 
 function tabInfo(){
