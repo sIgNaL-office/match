@@ -548,10 +548,25 @@ const PF_RENT=[
   {k:"commonFee",label:"管理費・共益費（月）",unit:"円",type:"number"},
   {k:"deposit",label:"敷金",unit:"ヶ月",type:"number"},
   {k:"keyMoney",label:"礼金",unit:"ヶ月",type:"number"},
+  {k:"depositAdd",label:"敷金積み増し・保証金（条件付き）",wide:true},
   {k:"guarantee",label:"保証会社",},
+  {k:"guarPct",label:"初回保証料率",unit:"%",type:"number"},
+  {k:"guarYen",label:"初回保証料（金額の場合）",unit:"円",type:"number"},
+  {k:"guarMonthly",label:"保証料（月額・更新）"},
   {k:"rentInsurance",label:"火災保険",unit:"円",type:"number"},
+  {k:"rentInsNote",label:"火災保険の条件"},
   {k:"keyChange",label:"鍵交換費",unit:"円",type:"number"},
-  {k:"rentOther",label:"その他初期費用",unit:"円",type:"number"},
+  {k:"otherItems",label:"その他初期費用の内訳（名称：金額、…）",wide:true},
+  {k:"rentOther",label:"その他初期費用（合計）",unit:"円",type:"number"},
+  {k:"monthlyItems",label:"月々の付帯費用",wide:true},
+  {k:"freeRent",label:"フリーレント",unit:"ヶ月",type:"number"},
+  {k:"freeRentNote",label:"期限・条件（フリーレント等）"},
+  {k:"parkFee",label:"駐車場 月額",unit:"円",type:"number"},
+  {k:"parkDep",label:"駐車場 敷金",unit:"ヶ月",type:"number"},
+  {k:"parkNote",label:"駐車場の条件",wide:true},
+  {k:"contract",label:"契約形態・期間"},
+  {k:"renewal",label:"更新料・再契約料"},
+  {k:"brokerM",label:"図面記載の仲介手数料",unit:"ヶ月（税別）",type:"number"},
 ];
 const PF_MOTO=[
   {k:"motoCompany",label:"元付会社"},
@@ -562,6 +577,7 @@ const PF_MOTO=[
   {k:"torihiki",label:"取引態様（図面記載）"},
   {k:"commission",label:"手数料条件（分かれ等）"},
   {k:"adOk",label:"広告転載可否（図面記載）"},
+  {k:"validity",label:"図面の有効期限・情報日"},
   {k:"remarks",label:"備考",wide:true},
 ];
 function propFields(){ return [...PF_COMMON,...(st.mode==="sale"?PF_SALE:PF_RENT),...PF_MOTO]; }
@@ -752,6 +768,12 @@ DOCS.plan={ title:"資金計画書", file:()=>`資金計画書_${st.P.name||"物
 };
 
 /* ---- 初期費用計算書（賃貸） ---- */
+function otherItem(i){ const t=String(st.P.otherItems||"").trim();
+  if(!t){ return i===0&&num(st.P.rentOther)?{n:"その他初期費用",y:num(st.P.rentOther)}:{n:"",y:0}; }
+  const its=t.split(/[、\n／]/).map(x=>x.trim()).filter(Boolean).map(x=>{ const m=x.match(/^(.*?)[：:\s]*([\d,，]+)\s*円?[^\d]*$/); return m?{n:m[1].trim(),y:num(m[2])}:{n:x,y:0}; });
+  if(i===2&&its.length>3){ return {n:its.slice(2).map(x=>x.n).join("・"),y:its.slice(2).reduce((a,x)=>a+x.y,0)}; }
+  return its[i]||{n:"",y:0}; }
+const blankV=x=>x===undefined||x===null||String(x).trim()==="";
 DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.P.name||"物件"}.pdf`,
   fields:()=>[
     {k:"cust",label:"お客様名",def:""},
@@ -764,18 +786,20 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
     {k:"deposit",label:"敷金",unit:"ヶ月",type:"number",def:()=>st.P.deposit||0},
     {k:"keyMoney",label:"礼金",unit:"ヶ月",type:"number",def:()=>st.P.keyMoney||0},
     {k:"nextMonth",label:"翌月分の前家賃を含める",type:"check",def:true},
-    {k:"brokerM",label:"仲介手数料",unit:"ヶ月（税別）",type:"number",def:1},
-    {k:"guarPct",label:"保証会社 初回保証料",unit:"％（月額総賃料に対し）",type:"number",def:50},
-    {k:"guarYen",label:"初回保証料を金額で指定（任意）",unit:"円（入れると％より優先）",type:"number",def:""},
-    {k:"insurance",label:"火災保険料",unit:"円",type:"number",def:()=>st.P.rentInsurance||20000},
-    {k:"keyChange",label:"鍵交換費",unit:"円",type:"number",def:()=>st.P.keyChange||22000},
-    {k:"other1n",label:"その他① 名称",def:()=>num(st.P.rentOther)?"その他初期費用":"室内消毒・抗菌"},
-    {k:"other1",label:"その他①",unit:"円",type:"number",def:()=>num(st.P.rentOther)||0},
-    {k:"other2n",label:"その他② 名称",def:""},
-    {k:"other2",label:"その他②",unit:"円",type:"number",def:0},
-    {k:"freeRent",label:"フリーレント",unit:"ヶ月",type:"number",def:0},
-    {k:"parkFee",label:"駐車場 月額（任意）",unit:"円",type:"number",def:0},
-    {k:"parkDep",label:"駐車場 敷金",unit:"ヶ月",type:"number",def:0},
+    {k:"brokerM",label:"仲介手数料",unit:"ヶ月（税別）",type:"number",def:()=>st.P.brokerM!==undefined&&st.P.brokerM!==""?st.P.brokerM:1},
+    {k:"guarPct",label:"保証会社 初回保証料（空欄＝要確認）",unit:"％（月額総賃料に対し）",type:"number",def:()=>st.P.guarPct??""},
+    {k:"guarYen",label:"初回保証料を金額で指定（任意）",unit:"円（入れると％より優先）",type:"number",def:()=>st.P.guarYen??""},
+    {k:"insurance",label:"火災保険料（空欄＝要確認）",unit:"円",type:"number",def:()=>st.P.rentInsurance??""},
+    {k:"keyChange",label:"鍵交換費（空欄＝要確認）",unit:"円",type:"number",def:()=>st.P.keyChange??""},
+    {k:"other1n",label:"その他① 名称",def:()=>otherItem(0).n},
+    {k:"other1",label:"その他①",unit:"円",type:"number",def:()=>otherItem(0).y},
+    {k:"other2n",label:"その他② 名称",def:()=>otherItem(1).n},
+    {k:"other2",label:"その他②",unit:"円",type:"number",def:()=>otherItem(1).y},
+    {k:"other3n",label:"その他③ 名称",def:()=>otherItem(2).n},
+    {k:"other3",label:"その他③",unit:"円",type:"number",def:()=>otherItem(2).y},
+    {k:"freeRent",label:"フリーレント",unit:"ヶ月",type:"number",def:()=>num(st.P.freeRent)||0},
+    {k:"parkFee",label:"駐車場 月額（任意）",unit:"円",type:"number",def:()=>num(st.P.parkFee)||0},
+    {k:"parkDep",label:"駐車場 敷金",unit:"ヶ月",type:"number",def:()=>num(st.P.parkDep)||0},
     {k:"parkIncl",label:"駐車場を初期費用の合計に含める（含めない場合は「ご利用の場合」として別記）",type:"check",def:false},
     {k:"memo",label:"備考",type:"textarea",def:"※金額は概算です。貸主・管理会社の条件により変動する場合があります。"},
   ],
@@ -789,16 +813,20 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
     if(!v.tbd) rows.push(["日割家賃・管理費",fr?0:prorate, md?`${md}（${days}日分）`:"","rent"]);
     if(v.nextMonth) rows.push(["翌月分家賃・管理費",fr>=1?0:m,"前家賃1ヶ月分","rent"]);
     rows.push(["仲介手数料",Math.round(rent*num(v.brokerM)*1.1),`賃料×${num(v.brokerM)}ヶ月＋消費税`,"fee"]);
-    rows.push(["保証会社 初回保証料",num(v.guarYen)?num(v.guarYen):Math.round(m*num(v.guarPct)/100),(num(v.guarYen)?"":`月額総賃料×${num(v.guarPct)}%`)+(st.P.guarantee?`（${st.P.guarantee}）`:""),"etc"]);
-    rows.push(["火災保険料",num(v.insurance),"2年契約目安","etc"]);
-    rows.push(["鍵交換費",num(v.keyChange),"","etc"]);
+    if(!num(v.guarYen)&&blankV(v.guarPct)) rows.push(["保証会社 初回保証料",0,"要確認（図面に料率の記載なし）"+(st.P.guarantee?`（${st.P.guarantee}）`:""),"etc","chk"]);
+    else rows.push(["保証会社 初回保証料",num(v.guarYen)?num(v.guarYen):Math.round(m*num(v.guarPct)/100),(num(v.guarYen)?"":`月額総賃料×${num(v.guarPct)}%`)+(st.P.guarantee?`（${st.P.guarantee}）`:""),"etc"]);
+    if(blankV(v.insurance)) rows.push(["火災保険料",0,"要確認（図面に金額の記載なし）"+(st.P.rentInsNote?`（${st.P.rentInsNote}）`:""),"etc","chk"]);
+    else rows.push(["火災保険料",num(v.insurance),st.P.rentInsNote||"2年契約目安","etc"]);
+    if(blankV(v.keyChange)) rows.push(["鍵交換費",0,"要確認（図面に記載なし）","etc","chk"]);
+    else rows.push(["鍵交換費",num(v.keyChange),"","etc"]);
     if(v.other1n&&num(v.other1)) rows.push([v.other1n,num(v.other1),"","etc"]);
     if(v.other2n&&num(v.other2)) rows.push([v.other2n,num(v.other2),"","etc"]);
+    if(v.other3n&&num(v.other3)) rows.push([v.other3n,num(v.other3),"","etc"]);
     const pf=num(v.parkFee), pdM=num(v.parkDep), park={fee:pf,depM:pdM,dep:pf*pdM,total:pf?pf+pf*pdM:0};
     if(pf&&v.parkIncl){ rows.push(["駐車場 月額（初月分）",pf,"駐車料金1ヶ月分","rent"]); if(pdM) rows.push(["駐車場 敷金",park.dep,`駐車料金×${pdM}ヶ月`,"dep"]); }
-    rows=rows.filter(r=>r[1]||/^(敷金|礼金|仲介)/.test(r[0]));
+    rows=rows.filter(r=>r[1]||r[4]==="chk"||/^(敷金|礼金|仲介)/.test(r[0]));
     const sum=k=>rows.filter(r=>r[3]===k).reduce((a,r)=>a+r[1],0);
-    return {rows,total:rows.reduce((a,r)=>a+r[1],0),m,rent,cm,cats:{rent:sum("rent"),dep:sum("dep"),fee:sum("fee"),etc:sum("etc")},days,md,tbd:!!v.tbd,park,parkIncl:!!(pf&&v.parkIncl)};
+    return {rows,total:rows.reduce((a,r)=>a+r[1],0),chk:rows.filter(r=>r[4]==="chk").length,m,rent,cm,cats:{rent:sum("rent"),dep:sum("dep"),fee:sum("fee"),etc:sum("etc")},days,md,tbd:!!v.tbd,park,parkIncl:!!(pf&&v.parkIncl)};
   },
   render(v){
     const c=this.calc(v), s=staff(num(v.staff)), P=st.P;
@@ -816,7 +844,7 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
       <div class="pl-prop">
         <div style="flex:1"><div class="pl-kl">物件</div><div class="pl-pn">${esc(P.name||"　")}</div><div class="pl-pa">${esc(P.address||"")}</div>
           <div class="pl-pa">${esc([P.layout,P.bldgArea,P.access].filter(Boolean).join("　／　"))}</div></div>
-        <div class="pl-price"><div style="font-size:11px;opacity:.85">ご契約時のお支払い（概算）</div><div>${comma(c.total)}<small>円${c.tbd?"＋日割り家賃":""}</small></div></div>
+        <div class="pl-price"><div style="font-size:11px;opacity:.85">ご契約時のお支払い（概算）</div><div>${comma(c.total)}<small>円${c.tbd?"＋日割り家賃":""}${c.chk?"＋要確認":""}</small></div></div>
       </div>
       <div class="pl-kpis" style="grid-template-columns:repeat(4,1fr)">
         <div class="pl-kpi"><div class="pl-kl">賃料</div><div class="pl-kv">${comma(c.rent)}<small>円</small></div></div>
@@ -830,9 +858,9 @@ DOCS.init={ title:"初期費用計算書", file:()=>`初期費用計算書_${st.
       <div class="in-grid">
         ${groups.map(([k,l])=>{ const rs=c.rows.filter(r=>r[3]===k); if(!rs.length) return ""; const col=CAT.find(x=>x[0]===k)[2];
           return `<div class="in-g"><div class="in-gh" style="border-color:${col}"><span>${l}</span><b>${comma(c.cats[k])}<small>円</small></b></div>
-            ${rs.map(r=>`<div class="in-r"><div><div class="in-rl">${esc(r[0])}</div>${r[2]?`<div class="in-rn">${esc(r[2])}</div>`:""}</div><div class="in-ra">${comma(r[1])}<small>円</small></div></div>`).join("")}</div>`; }).join("")}
+            ${rs.map(r=>`<div class="in-r"><div><div class="in-rl">${esc(r[0])}</div>${r[2]?`<div class="in-rn">${esc(r[2])}</div>`:""}</div><div class="in-ra">${r[4]==="chk"?`<span style="color:#c0392b;font-weight:700">要確認</span>`:`${comma(r[1])}<small>円</small>`}</div></div>`).join("")}</div>`; }).join("")}
       </div>
-      <div class="in-total"><span>初期費用 合計</span><b>${comma(c.total)}<small>円${c.tbd?"＋日割り家賃":""}</small></b></div>
+      <div class="in-total"><span>初期費用 合計</span><b>${comma(c.total)}<small>円${c.tbd?"＋日割り家賃":""}${c.chk?`＋要確認${c.chk}項目`:""}</small></b></div>
       ${c.tbd?`<div class="in-free">※日割り家賃は契約開始日が決まり次第ご案内します。</div>`:""}
       ${c.park.fee&&!c.parkIncl?`<div class="in-park"><b>駐車場をご利用の場合</b><span>月額駐車料金 ${comma(c.park.fee)}円${c.park.dep?`／駐車場敷金（${c.park.depM}ヶ月分）${comma(c.park.dep)}円`:""}</span><span class="in-pt">追加 ${comma(c.park.total)}円 → 合計 ${comma(c.total+c.park.total)}円${c.tbd?"＋日割り家賃":""}</span></div>`:""}
       ${num(v.freeRent)?`<div class="in-free">フリーレント ${num(v.freeRent)}ヶ月 適用で試算しています</div>`:""}
@@ -2558,6 +2586,21 @@ async function fileToCanvases(file,maxW=2000,maxPages=4){
     const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height); g.drawImage(im,0,0,c.width,c.height); return [c]; }
   finally{ URL.revokeObjectURL(url); }
 }
+async function hiResPage(file,idx,maxL=3400){
+  if(!file) return null;
+  if(file.type==="application/pdf"||/\.pdf$/i.test(file.name)){
+    if(!window.pdfjsLib) return null;
+    const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise; const pg=await pdf.getPage(idx+1); const vp0=pg.getViewport({scale:1});
+    const vp=pg.getViewport({scale:Math.min(6,maxL/Math.max(vp0.width,vp0.height))}); const c=document.createElement("canvas"); c.width=Math.round(vp.width); c.height=Math.round(vp.height);
+    const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height); await pg.render({canvasContext:g,viewport:vp}).promise; return c;
+  }
+  if(idx>0) return null;
+  const url=URL.createObjectURL(file);
+  try{ const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url});
+    const r=Math.min(1,maxL/Math.max(im.width,im.height)); const c=document.createElement("canvas"); c.width=Math.round(im.width*r); c.height=Math.round(im.height*r);
+    const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height); g.drawImage(im,0,0,c.width,c.height); return c; }
+  finally{ URL.revokeObjectURL(url); }
+}
 function setStatus(m,err){ const s=$("#readStatus"); s.textContent=m; s.classList.toggle("show",!!m); s.classList.toggle("err",!!err); }
 
 function renderPagePick(){
@@ -2599,31 +2642,46 @@ let samplerP=null; function sampler(){ if(!samplerP){
     f.limits=async()=>({images:true}); samplerP=Promise.resolve(f); }
   else samplerP=(window.claude&&window.claude.use)?window.claude.use("sample"):Promise.resolve(null); }
   return samplerP; }
-const EXTRACT_KEYS={deal:"'sale'（売買）か'rent'（賃貸）",name:"物件名（マンション名・○○町○丁目戸建 等）",kind:"種別：土地/新築戸建/中古戸建/中古マンション/新築マンション/一棟アパート/一棟マンション/区分収益/店舗・事務所/ビル/その他",address:"所在地（住居表示。図面の記載どおり。都道府県から）",chiban:"地番",kaoku:"家屋番号",station:"交通（路線・駅・徒歩分）",landArea:"土地面積（単位・公簿/実測の別も記載どおり）",bldgArea:"建物面積または専有面積",layout:"間取り",structure:"構造・階建・所在階",built:"築年月（例：2005年3月）",price:"売買価格（万円の数値。例 6450）",mgmtFee:"管理費 月額（円の数値）",income:"収益物件の満室想定年収・年間賃料収入（万円の数値。月額表記なら12倍。現況年収しかなければそれ）",repairFund:"修繕積立金 月額（円の数値）",rent:"賃料 月額（円の数値）",commonFee:"管理費・共益費 月額（円の数値）",deposit:"敷金（ヶ月数の数値）",keyMoney:"礼金（ヶ月数の数値）",guarantee:"保証会社に関する記載",rentInsurance:"火災保険料（円の数値）",keyChange:"鍵交換費（円の数値）",rentOther:"その他初期費用の合計（円の数値）",motoCompany:"元付業者（図面を作成した業者）の会社名。帯や枠に記載",motoBranch:"元付業者の支店・店舗名",motoTel:"元付業者TEL",motoFax:"元付業者FAX",motoPerson:"元付業者の担当者名",torihiki:"取引態様",commission:"手数料・分かれ等の条件",adOk:"広告転載の可否（例：広告可・承諾不要／広告不可／要承諾。記載がなければ空）",remarks:"その他重要事項の要約（用途地域・建ぺい率/容積率・接道・現況・引渡時期など、記載があるもののみ。150字以内）"};
+const EXTRACT_KEYS={deal:"'sale'（売買）か'rent'（賃貸）",name:"物件名（マンション名・○○町○丁目戸建 等）",kind:"種別：土地/新築戸建/中古戸建/中古マンション/新築マンション/一棟アパート/一棟マンション/区分収益/店舗・事務所/ビル/その他",address:"所在地（住居表示。図面の記載どおり。都道府県から）",chiban:"地番",kaoku:"家屋番号",station:"交通（路線・駅・徒歩分）",landArea:"土地面積（単位・公簿/実測の別も記載どおり）",bldgArea:"建物面積または専有面積",layout:"間取り",structure:"構造・階建・所在階",built:"築年月（例：2005年3月）",price:"売買価格（万円の数値。例 6450）",mgmtFee:"管理費 月額（円の数値）",income:"収益物件の満室想定年収・年間賃料収入（万円の数値。月額表記なら12倍。現況年収しかなければそれ）",repairFund:"修繕積立金 月額（円の数値）",rent:"賃料 月額（円の数値。「165万円」など万円表記は円に直す。「49万→45万」のような賃料改定は新しい方）",commonFee:"管理費・共益費 月額（円の数値。「無」「0円」「賃料に込み」は 0）",deposit:"敷金（ヶ月数の数値。金額で書かれていれば賃料で割ったヶ月数。「無し」は 0。「敷金・礼金 3ヶ月・無し」のように1欄に2つあれば順番どおりに分ける）",keyMoney:"礼金（ヶ月数の数値。決め方は敷金と同じ）",depositAdd:"ペット飼育時の敷金積み増し、事務所・店舗使用時の保証金など、条件付きで増える預り金（記載どおりの文字）",guarantee:"保証会社に関する記載",guarPct:"保証会社の初回保証料率（月額賃料等に対する%の数値。例 50。「50%〜」「50〜100%」など幅があれば最低値。外国籍・法人など条件で変わる場合は一般的な個人の値。金額だけの場合や記載がなければ \"\"）",guarYen:"初回保証料が金額で決まっている場合の円の数値（なければ \"\"）",guarMonthly:"保証料の月額・年額・更新料（記載どおりの文字）",rentInsurance:"火災保険料（円の数値。「16,550円〜」なら 16550。サポート料金などに含まれていて単独の金額がなければ \"\" にして rentInsNote へ）",rentInsNote:"火災保険の条件（保険会社・期間・加入必須・他の費用に含む等。記載どおりの文字）",keyChange:"鍵交換費（円の数値）",otherItems:"鍵交換・火災保険・保証料以外で、契約時（入居時）に払う費用の一覧。[{\"name\":\"除菌施工料\",\"yen\":19800}] の形の配列。退去時の費用・月々の費用・利用時のみの費用（駐車場登録料など）は入れない。なければ []",monthlyItems:"賃料・管理費以外に毎月かかる費用（サポート料・保証料月額・システム利用料・口座振替手数料など。記載どおりの文字）",freeRent:"フリーレントのヶ月数（数値。なければ \"\"）",freeRentNote:"フリーレントや業務委託料などの期限・条件（例：11月末までの契約に限る）",parkFee:"駐車場の月額（円の数値。賃料に込み・付属で別料金なしなら 0）",parkDep:"駐車場の敷金（ヶ月数の数値。金額なら駐車場月額で割る）",parkNote:"駐車場の条件（台数・付属・賃料込み・礼金・空き要確認など。記載どおりの文字）",contract:"契約形態と期間（例：定期借家 3年（再契約相談可）／普通借家 2年）。図面内で食い違えば両方書く",renewal:"更新料・再契約料（定期借家で更新がない場合は「更新不可」と書いたうえで再契約料を書く）",brokerM:"図面に書かれた仲介手数料のヶ月数（税別の数値。「1.1ヶ月（税込）」なら 1。記載がなければ \"\"）",motoCompany:"元付業者（図面を作成した業者）の会社名。帯や枠に記載",motoBranch:"元付業者の支店・店舗名",motoTel:"元付業者TEL",motoFax:"元付業者FAX",motoPerson:"元付業者の担当者名",torihiki:"取引態様（「仲介」と書かれていれば「媒介」と書く。専任・一般・専属専任・貸主・代理などはそのまま）",commission:"手数料・分かれ・AD等の条件（貸主/借主の負担割合、元付/客付の配分、AD・広告料・業務委託料。条件で変わる場合は条件ごとに書く）",validity:"図面の有効期限・情報公開日・情報更新日（記載どおり）",adOk:"広告転載の可否（例：広告可・承諾不要／広告不可／要承諾。記載がなければ空）",remarks:"その他重要事項の要約（用途地域・建ぺい率/容積率・接道・現況・引渡時期など、記載があるもののみ。150字以内）"};
 async function extractWithAI(){
   if(!st.pages.length) return;
+  let extra="";
   const sample=await sampler();
   if(!sample){ setStatus("このビューではAI読取が使えません。claude.aiでアプリを開くか、物件情報を手入力してください。",true); return; }
   try{ const lim=sample.limits?await sample.limits():{images:true}; if(lim&&lim.images===false){ setStatus("画像の読取が許可されていません。物件情報を手入力してください。",true); return; } }catch(e){}
   setStatus(`AIが図面${st.pages.length>1?`（${st.sel+1}ページ目）`:""}を読み取っています…（10〜30秒）`);
-  const blobs=await Promise.all([st.pages[st.sel]].map(c=>{ const r=Math.min(1,2000/Math.max(c.width,c.height)); const d=document.createElement("canvas"); d.width=c.width*r; d.height=c.height*r; d.getContext("2d").drawImage(c,0,0,d.width,d.height); return new Promise(res=>d.toBlob(res,"image/jpeg",0.88)); }));
+  const toBlob=(c,sx=0,sy=0,sw=c.width,sh=c.height)=>{ const r=Math.min(1,2000/Math.max(sw,sh)); const d=document.createElement("canvas"); d.width=Math.round(sw*r); d.height=Math.round(sh*r); const g=d.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,d.width,d.height); g.drawImage(c,sx,sy,sw,sh,0,0,d.width,d.height); return new Promise(res=>d.toBlob(res,"image/jpeg",0.88)); };
+  const blobs=[await toBlob(st.pages[st.sel])];
+  try{ const hc=await hiResPage(st.file,st.sel,3400);
+    if(hc&&Math.max(hc.width,hc.height)>2400){ const ov=0.04;
+      if(hc.width>=hc.height){ const w=Math.round(hc.width*(0.5+ov)); blobs.push(await toBlob(hc,0,0,w,hc.height),await toBlob(hc,hc.width-w,0,w,hc.height)); }
+      else { const h=Math.round(hc.height*(0.5+ov)); blobs.push(await toBlob(hc,0,0,hc.width,h),await toBlob(hc,0,hc.height-h,hc.width,h)); }
+      extra="- 画像1は図面全体、画像2・3は同じ図面を半分ずつ拡大したもの。小さい文字・表の数字は拡大画像で確認する。同じ情報を二重に数えない。\n"; } }catch(e){}
   const prompt=`あなたは日本の不動産業者のアシスタントです。添付は不動産の販売図面（マイソク）1ページです。図面に書かれている情報だけを読み取り、次のキーを持つJSONオブジェクト1つだけを出力してください（前後に文章やコードブロックを付けない）。
 ルール：
 - 図面に記載がない・読めない項目は空文字 "" にする。推測・補完は絶対にしない。
 - 数値指定の項目は数値（カンマ・単位なし）。読めなければ ""。
 - 文字は図面の表記どおり（全角半角は自然に）。
 - 1枚に複数の号棟・区画が載っている場合は、価格が最も目立つ号棟（なければ最初の号棟）を対象にし、remarksに「他に○号棟あり」と書く。
-- 元付業者は図面下部や枠内の業者帯（会社名・TEL/FAX・免許番号）から読む。取引態様が「売主」なら元付会社＝売主。
-キー：
+- 元付業者は図面下部や枠内の業者帯（会社名・TEL/FAX・免許番号）から読む。社名は「(株)」「株式会社」まで図面どおり。取引態様が「売主」なら元付会社＝売主。
+- 文字の項目では「税込」「税別」の注記を残す。
+- 間取りの欄がなくても、間取図からはっきり読めれば layout に入れ、remarks に「間取りは間取図から読取」と書く。
+- 退去時の費用（クリーニング・エアコン清掃など）は初期費用の項目に入れない。
+- 同じ項目が図面の2か所で違う（例：契約期間欄は定期借家、備考は一時使用）ときは、片方を選ばず remarks に「要確認：○○が2か所で違う（A／B）」と書く。
+- 図面の有効期限が過ぎている、情報日付が古いなどは remarks に書く。
+- 図面に印字された業者サイトのID・パスワードは読まない・出力しない。
+${extra}キー：
 ${Object.entries(EXTRACT_KEYS).map(([k,d])=>`- ${k}: ${d}`).join("\n")}`;
   try{
     const r=await sample(prompt,{images:blobs,modelTier:"default"});
     const t=(r&&r.text)||""; const m=t.match(/\{[\s\S]*\}/); if(!m) throw new Error("読み取り結果を解析できませんでした");
     const o=JSON.parse(m[0]); let n=0;
-    for(const k of Object.keys(EXTRACT_KEYS)){ if(k==="deal") continue; const val=o[k]; if(val!==undefined&&val!==null&&val!==""){ st.P[k]=String(val); n++; } }
+    if(Array.isArray(o.otherItems)){ const its=o.otherItems.filter(x=>x&&x.name&&num(x.yen)); o.otherItems=its.map(x=>`${String(x.name).replace(/[：:、]/g," ")}：${num(x.yen)}`).join("、"); if(its.length&&(o.rentOther===undefined||o.rentOther==="")) o.rentOther=its.reduce((a,x)=>a+num(x.yen),0); } else if(o.otherItems&&typeof o.otherItems!=="string") o.otherItems="";
+    for(const k of Object.keys(EXTRACT_KEYS)){ if(k==="deal") continue; const val=o[k]; if(val!==undefined&&val!==null&&val!==""){ st.P[k]=typeof val==="object"?JSON.stringify(val):String(val); n++; } }
     if(o.deal==="rent"||o.deal==="sale"){ if(o.deal!==st.mode){ st.mode=o.deal; renderTabs(); } }
     renderPropForm(); onDataChange();
-    setStatus(`読み取り完了：${n}項目を入力しました（${st.mode==="sale"?"売買":"賃貸"}として判定）。内容を確認してください。`); if(st.tab==="band") paintBand();
+    if(n<4||(!o.name&&!o.rent&&!o.price)){ setStatus(`図面の文字がほとんど読み取れませんでした（${n}項目）。PDFの文字情報が壊れていると、表示ソフトによって文字が消えることがあります。図面を開いてスクリーンショット（画像）を読み込み直すか、手入力してください。`,true); if(st.tab==="band") paintBand(); return; }
+    setStatus(`読み取り完了：${n}項目を入力しました（${st.mode==="sale"?"売買":"賃貸"}として判定）。「要確認」の項目と内容を確認してください。`); if(st.tab==="band") paintBand();
   }catch(e){
     if(e&&e.code==="not_granted") setStatus("AI読取が許可されませんでした。物件情報を手入力してください。",true);
     else if(e&&e.code==="rate_limited") setStatus("AIが混み合っています。少し待って「AIで再読取」を押してください。",true);
