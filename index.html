@@ -68,6 +68,8 @@ h2{font-family:var(--font-d);font-size:16px;margin:0 0 10px}
 #me-map.leaflet-container,#me-map.leaflet-grab,#me-map .leaflet-interactive{cursor:default}
 #me-map.leaflet-dragging.leaflet-grab{cursor:grabbing}
 #me-map .leaflet-marker-draggable{cursor:move}
+.draghandle{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--muted);font-size:16px;line-height:1;padding:4px 2px}
+.dragthumb{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .map.toned .leaflet-tile-pane{filter:grayscale(1) contrast(.85) brightness(1.08);opacity:.7}
 .pin{position:relative}
 .pin span{position:absolute;left:2px;top:1px;width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--pc);border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.45)}
@@ -1019,6 +1021,9 @@ function tabGaiyo(){
   const pdfId = (String(r.pdf || '').match(/\/d\/([\w-]+)/) || [])[1];
   const okType = f => /pdf|^image\//.test(f.mimeType || '') || /\.(pdf|jpe?g|png|gif|webp|heic|heif)$/i.test(f.name || '');
   const files = (d.files || []).filter(f => f.id !== pdfId && !/^物件概要書_/.test(f.name || ''));
+  // 資料の並び順（ドラッグで入れ替えた順。案件ごとに覚える）
+  const ord = (S.pdfOrder || {})[r.id] || [];
+  files.sort((a, b) => { const x = ord.indexOf(a.id), y = ord.indexOf(b.id); return (x < 0 ? 1e4 : x) - (y < 0 ? 1e4 : y); });
   const mode = S.pdfMode || 'only';
   const kb = n => n ? (n > 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB') : '';
   $('#dbody').innerHTML = `<div class="panel" style="margin-bottom:12px">
@@ -1030,11 +1035,11 @@ function tabGaiyo(){
         ${r.folder && S.me.admin ? `<a class="btn ghost sm" href="${esc(r.folder)}" target="_blank" rel="noopener">資料フォルダを開く</a>` : ''}
       </div>
       ${mode === 'bundle' ? `<div style="margin-top:10px">
-        <div class="sub" style="margin:0 0 4px">1ページ目に概要書、続けてチェックした資料を上から順に入れて1つのPDFにします（写真・画像もPDFのページになります）。</div>
+        <div class="sub" style="margin:0 0 4px">1ページ目に概要書、続けてチェックした資料を上から順に入れて1つのPDFにします（写真・画像もPDFのページになります）。左の「⠿」をドラッグすると順番を変えられます。</div>
         ${files.length ? `<div class="row" style="gap:8px;margin-bottom:4px"><button class="btn ghost sm" id="bAll">すべて選ぶ</button><button class="btn ghost sm" id="bNone">すべて外す</button></div>
         <div id="bfiles" style="display:flex;flex-direction:column;gap:2px;font-size:13px">${files.map(f => {
           const ok = okType(f);
-          return `<div style="display:flex;gap:6px;align-items:center;padding:2px 0"><label style="display:flex;gap:6px;align-items:center;flex:1;min-width:0${ok ? '' : ';color:var(--muted)'}"><input type="checkbox" style="width:auto" value="${esc(f.id)}"${ok ? '' : ' disabled'}${ok && (S.pdfPick || {})[f.id] ? ' checked' : ''}><span style="overflow-wrap:anywhere">${esc(f.name)}</span><span class="m" style="color:var(--muted);font-size:11.5px;white-space:nowrap">${kb(f.size)}${ok ? '' : '（PDF・画像以外は入れられません）'}</span></label>${ok ? `<button class="btn ghost sm" data-pv="${esc(f.id)}" style="white-space:nowrap">中身を見る</button>` : ''}</div>`;
+          return `<div class="dragrow" data-fid2="${esc(f.id)}" style="display:flex;gap:6px;align-items:center;padding:2px 0"><span class="draghandle" title="ドラッグで順番を変える">⠿</span><label style="display:flex;gap:6px;align-items:center;flex:1;min-width:0${ok ? '' : ';color:var(--muted)'}"><input type="checkbox" style="width:auto" value="${esc(f.id)}"${ok ? '' : ' disabled'}${ok && (S.pdfPick || {})[f.id] ? ' checked' : ''}><span style="overflow-wrap:anywhere">${esc(f.name)}</span><span class="m" style="color:var(--muted);font-size:11.5px;white-space:nowrap">${kb(f.size)}${ok ? '' : '（PDF・画像以外は入れられません）'}</span></label>${ok ? `<button class="btn ghost sm" data-pv="${esc(f.id)}" style="white-space:nowrap">中身を見る</button>` : ''}</div>`;
         }).join('')}</div>` : `<div class="note">資料フォルダにまとめられる資料がありません。「案件情報」から販売図面や写真を追加してください。</div>`}
       </div>` : ''}
       <div id="pdfprog" class="sub" style="margin:8px 0 0" hidden></div>
@@ -1045,6 +1050,12 @@ function tabGaiyo(){
   const pick = () => { S.pdfPick = {}; document.querySelectorAll('#bfiles input:checked').forEach(c => S.pdfPick[c.value] = 1); };
   document.querySelectorAll('#bfiles input').forEach(c => c.onchange = pick);
   document.querySelectorAll('[data-pv]').forEach(b => b.onclick = () => filePreview(r, files, b.dataset.pv, pick));
+  if ($('#bfiles')) dragSort($('#bfiles'), '.dragrow', { handle: '.draghandle' }, order => {
+    S.pdfOrder = S.pdfOrder || {}; S.pdfOrder[r.id] = order.map(i => files[i].id);
+    const sorted = order.map(i => files[i]); files.splice(0, files.length, ...sorted);
+    document.querySelectorAll('#bfiles .dragrow').forEach((el, i) => el.dataset.k = i);
+  });
+  document.querySelectorAll('#bfiles .dragrow').forEach((el, i) => el.dataset.k = i);
   if ($('#bAll')) $('#bAll').onclick = () => { document.querySelectorAll('#bfiles input:not([disabled])').forEach(c => c.checked = true); pick(); };
   if ($('#bNone')) $('#bNone').onclick = () => { document.querySelectorAll('#bfiles input').forEach(c => c.checked = false); pick(); };
   $('#mkpdf').onclick = async e => {
@@ -1062,6 +1073,64 @@ function tabGaiyo(){
   };
   const dl = $('#dlpdf'); if (dl) dl.onclick = () => downloadFile(dl, '');
   if ($('#mapedit')) $('#mapedit').onclick = () => mapEditor(d);
+}
+
+/* ===== ドラッグで並び替え（マウス・指の両方。longPress のときは指で長押ししてから動かす。スクロールと区別するため） =====
+   items は data-k に元の順番を持つ。終わると新しい並び（元の番号の配列）を onDone に渡す */
+function dragSort(box, sel, opt, onDone){
+  let it = null, armed = false, sx = 0, sy = 0, timer = 0, ghost = null, ox = 0, oy = 0;
+  const stopTouch = e => { if (armed) e.preventDefault(); };
+  box.addEventListener('touchmove', stopTouch, { passive: false });
+  const arm = e => {
+    armed = true; const b = it.getBoundingClientRect(); ox = sx - b.left; oy = sy - b.top;
+    ghost = it.cloneNode(true); ghost.style.cssText += `;position:fixed;left:${b.left}px;top:${b.top}px;width:${b.width}px;pointer-events:none;z-index:99;opacity:.85;box-shadow:0 6px 20px rgba(0,0,0,.25);transform:scale(1.02)`;
+    document.body.appendChild(ghost); it.style.opacity = '.3';
+    if (navigator.vibrate && e && e.pointerType !== 'mouse') try { navigator.vibrate(15); } catch (x) {}
+  };
+  box.addEventListener('pointerdown', e => {
+    const h = e.target.closest(opt.handle || sel); if (!h || !box.contains(h) || e.button > 0) return;
+    if (e.target.closest('button,input,a') && !opt.handle) return;
+    it = h.closest(sel); if (!it) return;
+    sx = e.clientX; sy = e.clientY; armed = false;
+    if (opt.longPress && e.pointerType !== 'mouse') timer = setTimeout(() => arm(e), 350);
+    else if (e.pointerType !== 'mouse') arm(e); // 取っ手（⠿）は指でもすぐ動かせる
+    try { h.setPointerCapture(e.pointerId); } catch (x) {}
+  });
+  box.addEventListener('pointermove', e => {
+    if (!it) return;
+    if (!armed) {
+      const d = Math.hypot(e.clientX - sx, e.clientY - sy);
+      if (e.pointerType === 'mouse' ? d > 6 : false) arm(e);
+      else if (d > 10) { clearTimeout(timer); it = null; } // 長押し前に動いた＝スクロール
+      if (!armed) return;
+    }
+    e.preventDefault();
+    ghost.style.left = (e.clientX - ox) + 'px'; ghost.style.top = (e.clientY - oy) + 'px';
+    const over = [...box.querySelectorAll(sel)].find(x => { if (x === it) return false; const b = x.getBoundingClientRect(); return e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom; });
+    if (over) {
+      const all = [...box.querySelectorAll(sel)], a = all.indexOf(it), b = all.indexOf(over);
+      over.parentNode.insertBefore(it, a < b ? over.nextSibling : over);
+    }
+    // 端に来たら自動でスクロール
+    const sc = box.getBoundingClientRect();
+    if (e.clientY < sc.top + 30) box.scrollTop -= 12; else if (e.clientY > sc.bottom - 30) box.scrollTop += 12;
+  });
+  const end = () => {
+    clearTimeout(timer);
+    if (it && armed) {
+      it.style.opacity = ''; if (ghost) ghost.remove(); ghost = null;
+      const order = [...box.querySelectorAll(sel)].map(x => +x.dataset.k);
+      armed = false; it = null;
+      // ドラッグ直後のクリック（チェックの切替など）は無視
+      const eat = ev => { ev.stopPropagation(); ev.preventDefault(); };
+      box.addEventListener('click', eat, { capture: true, once: true });
+      setTimeout(() => box.removeEventListener('click', eat, { capture: true }), 300);
+      setTimeout(() => onDone(order), 0);
+      return;
+    }
+    it = null; armed = false;
+  };
+  box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
 }
 
 /* ===== 資料の中身を見る（PDFは全ページ、画像はそのまま）。読んだ資料はまとめるときにも使い回す ===== */
@@ -1209,7 +1278,7 @@ async function pdfEditor(bytes, name){
   box.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:12px';
   box.innerHTML = `<div class="panel" style="width:min(1000px,100%);max-height:100%;display:flex;flex-direction:column;background:var(--surface);border-radius:10px;padding:14px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>PDFの確認・編集（${doc.numPages}ページ）</b><button class="btn ghost sm" id="pe-x">やめる</button></div>
-    <p class="sub" style="margin:6px 0 8px">↺↻で向きを変更、◀▶で並び替え、「一部を消す」で消したい所を囲むと白で塗りつぶします（業者名・連絡先の帯など）。「削除」でページごと外せます。</p>
+    <p class="sub" style="margin:6px 0 8px">↺↻で向きを変更、ページをドラッグ（スマホは長押ししてから動かす）か◀▶で並び替え、「一部を消す」で消したい所を囲むと白で塗りつぶします（業者名・連絡先の帯など）。「削除」でページごと外せます。</p>
     <div id="pe-grid" style="overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;padding:4px"></div>
     <div class="row" style="gap:8px;margin-top:10px;align-items:center"><span class="sub" id="pe-n" style="margin:0"></span><span style="flex:1"></span><button class="btn sm" id="pe-dl">この内容でダウンロード</button></div></div>`;
   document.body.appendChild(box);
@@ -1229,8 +1298,8 @@ async function pdfEditor(bytes, name){
   const thumb = async p => { thumbs[p.i] = (await render(p, 300)).c.toDataURL('image/jpeg', .8); };
   const grid = box.querySelector('#pe-grid');
   const draw = () => {
-    grid.innerHTML = pages.map((p, k) => `<div style="border:1px solid var(--line);border-radius:8px;padding:6px;${p.del ? 'opacity:.4' : ''}">
-      <div style="height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#e9ecea;border-radius:4px">${thumbs[p.i] ? `<img src="${thumbs[p.i]}" style="max-width:${p.rot % 180 ? 190 : 150}px;max-height:${p.rot % 180 ? 150 : 190}px;transform:rotate(${p.rot}deg);box-shadow:0 1px 4px rgba(0,0,0,.2)">` : '<span class="spin"></span>'}</div>
+    grid.innerHTML = pages.map((p, k) => `<div class="dragcard" data-k="${k}" style="border:1px solid var(--line);border-radius:8px;padding:6px;background:var(--surface);${p.del ? 'opacity:.4' : ''}">
+      <div class="dragthumb" title="ドラッグで並び替え" style="cursor:grab;height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#e9ecea;border-radius:4px">${thumbs[p.i] ? `<img src="${thumbs[p.i]}" draggable="false" style="max-width:${p.rot % 180 ? 190 : 150}px;max-height:${p.rot % 180 ? 150 : 190}px;transform:rotate(${p.rot}deg);box-shadow:0 1px 4px rgba(0,0,0,.2)">` : '<span class="spin"></span>'}</div>
       <div style="font-size:12px;margin:4px 0;display:flex;justify-content:space-between"><b>${k + 1}ページ${k === 0 && p.i === 0 ? '（概要書）' : ''}</b>${p.rects.length ? `<span style="color:var(--s)">消した所 ${p.rects.length}</span>` : ''}</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">
         <button class="btn ghost sm" data-pa="l" data-k="${k}" title="左に回す">↺</button><button class="btn ghost sm" data-pa="r" data-k="${k}" title="右に回す">↻</button>
@@ -1278,6 +1347,7 @@ async function pdfEditor(bytes, name){
     ov.querySelector('#er-c').onclick = () => { p.rects = []; paint(); };
     ov.querySelector('#er-ok').onclick = async () => { ov.remove(); thumbs[p.i] = null; draw(); await thumb(p); draw(); };
   };
+  dragSort(grid, '.dragcard', { handle: '.dragthumb', longPress: true }, order => { const np = order.map(i => pages[i]); pages.splice(0, pages.length, ...np); draw(); });
   draw();
   (async () => { for (const p of pages) { if (!box.isConnected) return; await thumb(p); if (box.isConnected) draw(); } })();
   box.querySelector('#pe-dl').onclick = async e => {
