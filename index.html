@@ -1050,9 +1050,9 @@ function tabGaiyo(){
     try {
       const x = await api('makePdf', { id: r.id }); r.pdf = x.url; r.folder = r.folder || x.folder;
       if (!chosen.length) { tabGaiyo(); downloadFile($('#dlpdf'), ''); toast('PDFを作成しました。ダウンロードが始まらない場合は「前回作ったPDFをダウンロード」を押してください'); return; }
-      const skipped = await bundlePdf(r, chosen, t => { const p = $('#pdfprog'); if (p) { p.hidden = false; p.textContent = t; } });
+      const skipped = await bundlePdf(r, chosen, t => { const p = $('#pdfprog'); if (p) { p.hidden = !t; p.textContent = t; } });
       tabGaiyo();
-      toast(skipped.length ? 'PDFを作成しました。入れられなかった資料：' + skipped.join('、') : '概要書と資料をまとめたPDFを作成しました', skipped.length ? 8000 : 3500);
+      if (skipped.length) toast('入れられなかった資料：' + skipped.join('、'), 8000);
     } catch (err) { toast(err.message, 6000); busy(b, false); const p = $('#pdfprog'); if (p) p.hidden = true; }
   };
   const dl = $('#dlpdf'); if (dl) dl.onclick = () => downloadFile(dl, '');
@@ -1113,10 +1113,131 @@ async function bundlePdf(r, chosen, prog){
   const bytes = await out.save();
   const day = new Date(), ymd = day.getFullYear() + ('0' + (day.getMonth() + 1)).slice(-2) + ('0' + day.getDate()).slice(-2);
   const name = ('物件概要書_' + (r.title || r.id) + '_資料付き_' + ymd + '.pdf').replace(/[\\/:*?"<>|]/g, '_');
-  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  prog('');
+  await pdfEditor(bytes, name);
   return skipped;
+}
+
+/* ===== まとめたPDFを確認・編集してからダウンロード（ページの向き・並び順・削除・一部を白で消す） =====
+   一部を消したページは画像にしてから白で塗るので、消した部分の文字はPDFに残らない */
+function loadPdfJs(){
+  if (window.pdfjsLib) return Promise.resolve();
+  if (S.pdfJsP) return S.pdfJsP;
+  S.pdfJsP = new Promise((ok, ng) => {
+    const js = document.createElement('script'); js.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    js.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; ok(); };
+    js.onerror = () => { S.pdfJsP = null; ng(new Error('PDFの表示部品を読み込めませんでした。電波の良いところでもう一度お試しください')); };
+    document.head.appendChild(js);
+  });
+  return S.pdfJsP;
+}
+async function pdfEditor(bytes, name){
+  await loadPdfJs();
+  const doc = await window.pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+  const pages = []; for (let i = 0; i < doc.numPages; i++) pages.push({ i: i, rot: 0, del: false, rects: [] });
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:12px';
+  box.innerHTML = `<div class="panel" style="width:min(1000px,100%);max-height:100%;display:flex;flex-direction:column;background:var(--surface);border-radius:10px;padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b>PDFの確認・編集（${doc.numPages}ページ）</b><button class="btn ghost sm" id="pe-x">やめる</button></div>
+    <p class="sub" style="margin:6px 0 8px">↺↻で向きを変更、◀▶で並び替え、「一部を消す」で消したい所を囲むと白で塗りつぶします（業者名・連絡先の帯など）。「削除」でページごと外せます。</p>
+    <div id="pe-grid" style="overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;padding:4px"></div>
+    <div class="row" style="gap:8px;margin-top:10px;align-items:center"><span class="sub" id="pe-n" style="margin:0"></span><span style="flex:1"></span><button class="btn sm" id="pe-dl">この内容でダウンロード</button></div></div>`;
+  document.body.appendChild(box);
+  const close = () => { box.remove(); doc.destroy(); };
+  box.querySelector('#pe-x').onclick = close;
+  // ページを描く（rects は描いた向き＝元の向きでの 0〜1 の位置）
+  const render = async (p, width) => {
+    const pg = await doc.getPage(p.i + 1), v1 = pg.getViewport({ scale: 1 });
+    const vp = pg.getViewport({ scale: width / v1.width });
+    const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    await pg.render({ canvasContext: g, viewport: vp }).promise;
+    g.fillStyle = '#fff'; p.rects.forEach(r => g.fillRect(r[0] * c.width, r[1] * c.height, r[2] * c.width, r[3] * c.height));
+    return { c: c, v1: v1 };
+  };
+  const thumbs = {};
+  const thumb = async p => { thumbs[p.i] = (await render(p, 300)).c.toDataURL('image/jpeg', .8); };
+  const grid = box.querySelector('#pe-grid');
+  const draw = () => {
+    grid.innerHTML = pages.map((p, k) => `<div style="border:1px solid var(--line);border-radius:8px;padding:6px;${p.del ? 'opacity:.4' : ''}">
+      <div style="height:200px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#e9ecea;border-radius:4px">${thumbs[p.i] ? `<img src="${thumbs[p.i]}" style="max-width:${p.rot % 180 ? 190 : 150}px;max-height:${p.rot % 180 ? 150 : 190}px;transform:rotate(${p.rot}deg);box-shadow:0 1px 4px rgba(0,0,0,.2)">` : '<span class="spin"></span>'}</div>
+      <div style="font-size:12px;margin:4px 0;display:flex;justify-content:space-between"><b>${k + 1}ページ${k === 0 && p.i === 0 ? '（概要書）' : ''}</b>${p.rects.length ? `<span style="color:var(--s)">消した所 ${p.rects.length}</span>` : ''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        <button class="btn ghost sm" data-pa="l" data-k="${k}" title="左に回す">↺</button><button class="btn ghost sm" data-pa="r" data-k="${k}" title="右に回す">↻</button>
+        <button class="btn ghost sm" data-pa="u" data-k="${k}" title="前へ"${k ? '' : ' disabled'}>◀</button><button class="btn ghost sm" data-pa="d" data-k="${k}" title="後ろへ"${k < pages.length - 1 ? '' : ' disabled'}>▶</button>
+        <button class="btn ghost sm" data-pa="e" data-k="${k}"${p.del ? ' disabled' : ''}>一部を消す</button>
+        <button class="btn ghost sm" data-pa="x" data-k="${k}">${p.del ? '戻す' : '削除'}</button></div></div>`).join('');
+    const n = pages.filter(p => !p.del).length;
+    box.querySelector('#pe-n').textContent = n + 'ページを出力' + (n < pages.length ? '（' + (pages.length - n) + 'ページ削除）' : '');
+    grid.querySelectorAll('[data-pa]').forEach(b => b.onclick = () => {
+      const k = +b.dataset.k, p = pages[k], a = b.dataset.pa;
+      if (a === 'l') p.rot = (p.rot + 270) % 360;
+      if (a === 'r') p.rot = (p.rot + 90) % 360;
+      if (a === 'u') pages.splice(k - 1, 0, pages.splice(k, 1)[0]);
+      if (a === 'd') pages.splice(k + 1, 0, pages.splice(k, 1)[0]);
+      if (a === 'x') p.del = !p.del;
+      if (a === 'e') return eraser(p);
+      draw();
+    });
+  };
+  // 一部を消す：ページを大きく出して、ドラッグで囲んだ所を白で塗る
+  const eraser = async p => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px';
+    ov.innerHTML = `<div class="panel" style="background:var(--surface);border-radius:8px;padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:100%">
+      <span style="font-size:13px">消したい所を指やマウスでなぞって囲んでください</span><button class="btn ghost sm" id="er-u">1つ戻す</button><button class="btn ghost sm" id="er-c">すべて戻す</button><button class="btn sm" id="er-ok">完了</button></div>
+      <div style="overflow:auto;max-width:100%;flex:1"><div style="position:relative;display:inline-block;touch-action:none" id="er-w"><span class="spin"></span></div></div>`;
+    document.body.appendChild(ov);
+    const keep = p.rects.slice(); p.rects = [];
+    const W = Math.min(900, window.innerWidth - 40);
+    const base = (await render(p, W)).c; p.rects = keep;
+    const w = ov.querySelector('#er-w'); w.innerHTML = ''; w.appendChild(base);
+    base.style.cssText = 'display:block;max-width:none';
+    const cv = document.createElement('canvas'); cv.width = base.width; cv.height = base.height; cv.style.cssText = 'position:absolute;left:0;top:0;cursor:crosshair'; w.appendChild(cv);
+    const g = cv.getContext('2d');
+    const paint = tmp => { g.clearRect(0, 0, cv.width, cv.height); g.fillStyle = 'rgba(255,255,255,.92)'; g.strokeStyle = '#e60012'; g.lineWidth = 2;
+      p.rects.concat(tmp ? [tmp] : []).forEach(r => { const x = r[0] * cv.width, y = r[1] * cv.height, ww = r[2] * cv.width, hh = r[3] * cv.height; g.fillRect(x, y, ww, hh); g.strokeRect(x, y, ww, hh); }); };
+    let st = null;
+    const pos = e => { const b = cv.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)), Math.min(1, Math.max(0, (e.clientY - b.top) / b.height))]; };
+    const rect = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])];
+    cv.onpointerdown = e => { st = pos(e); cv.setPointerCapture(e.pointerId); };
+    cv.onpointermove = e => { if (st) paint(rect(st, pos(e))); };
+    cv.onpointerup = e => { if (!st) return; const r = rect(st, pos(e)); st = null; if (r[2] > .005 && r[3] > .005) p.rects.push(r); paint(); };
+    paint();
+    ov.querySelector('#er-u').onclick = () => { p.rects.pop(); paint(); };
+    ov.querySelector('#er-c').onclick = () => { p.rects = []; paint(); };
+    ov.querySelector('#er-ok').onclick = async () => { ov.remove(); thumbs[p.i] = null; draw(); await thumb(p); draw(); };
+  };
+  draw();
+  (async () => { for (const p of pages) { if (!box.isConnected) return; await thumb(p); if (box.isConnected) draw(); } })();
+  box.querySelector('#pe-dl').onclick = async e => {
+    const keep = pages.filter(p => !p.del);
+    if (!keep.length) { toast('出力するページがありません'); return; }
+    const b = e.currentTarget; busy(b, true, '作成中…');
+    try {
+      const { PDFDocument, degrees } = window.PDFLib;
+      const src = await PDFDocument.load(bytes, { ignoreEncryption: true }), out = await PDFDocument.create();
+      for (const p of keep) {
+        if (p.rects.length) {
+          // 消した所があるページは画像にして白で塗る（長辺2400pxまで）
+          const pg = await doc.getPage(p.i + 1), v1 = pg.getViewport({ scale: 1 });
+          const { c } = await render(p, v1.width * Math.min(2.5, 2400 / Math.max(v1.width, v1.height)));
+          const jpg = await new Promise(ok => c.toBlob(x => x.arrayBuffer().then(a => ok(new Uint8Array(a))), 'image/jpeg', .9));
+          const img = await out.embedJpg(jpg), np = out.addPage([v1.width, v1.height]);
+          np.drawImage(img, { x: 0, y: 0, width: v1.width, height: v1.height });
+          np.setRotation(degrees(p.rot));
+        } else {
+          const [np] = await out.copyPages(src, [p.i]); out.addPage(np);
+          np.setRotation(degrees((np.getRotation().angle + p.rot) % 360));
+        }
+      }
+      const data = await out.save();
+      const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      close(); toast('PDFをダウンロードしました');
+    } catch (err) { toast('PDFを作れませんでした：' + err.message, 6000); busy(b, false); }
+  };
 }
 
 /* ===== 案内図に対象地の枠を描く（点を順にタップして囲む。点はドラッグで動かせる） =====
