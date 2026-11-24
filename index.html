@@ -1034,7 +1034,7 @@ function tabGaiyo(){
         ${files.length ? `<div class="row" style="gap:8px;margin-bottom:4px"><button class="btn ghost sm" id="bAll">すべて選ぶ</button><button class="btn ghost sm" id="bNone">すべて外す</button></div>
         <div id="bfiles" style="display:flex;flex-direction:column;gap:2px;font-size:13px">${files.map(f => {
           const ok = okType(f);
-          return `<label style="display:flex;gap:6px;align-items:center${ok ? '' : ';color:var(--muted)'}"><input type="checkbox" style="width:auto" value="${esc(f.id)}"${ok ? '' : ' disabled'}${ok && (S.pdfPick || {})[f.id] ? ' checked' : ''}>${esc(f.name)}<span class="m" style="color:var(--muted);font-size:11.5px">${kb(f.size)}${ok ? '' : '（PDF・画像以外は入れられません）'}</span></label>`;
+          return `<div style="display:flex;gap:6px;align-items:center;padding:2px 0"><label style="display:flex;gap:6px;align-items:center;flex:1;min-width:0${ok ? '' : ';color:var(--muted)'}"><input type="checkbox" style="width:auto" value="${esc(f.id)}"${ok ? '' : ' disabled'}${ok && (S.pdfPick || {})[f.id] ? ' checked' : ''}><span style="overflow-wrap:anywhere">${esc(f.name)}</span><span class="m" style="color:var(--muted);font-size:11.5px;white-space:nowrap">${kb(f.size)}${ok ? '' : '（PDF・画像以外は入れられません）'}</span></label>${ok ? `<button class="btn ghost sm" data-pv="${esc(f.id)}" style="white-space:nowrap">中身を見る</button>` : ''}</div>`;
         }).join('')}</div>` : `<div class="note">資料フォルダにまとめられる資料がありません。「案件情報」から販売図面や写真を追加してください。</div>`}
       </div>` : ''}
       <div id="pdfprog" class="sub" style="margin:8px 0 0" hidden></div>
@@ -1044,6 +1044,7 @@ function tabGaiyo(){
   document.querySelectorAll('[data-pm]').forEach(b => b.onclick = () => { S.pdfMode = b.dataset.pm; tabGaiyo(); });
   const pick = () => { S.pdfPick = {}; document.querySelectorAll('#bfiles input:checked').forEach(c => S.pdfPick[c.value] = 1); };
   document.querySelectorAll('#bfiles input').forEach(c => c.onchange = pick);
+  document.querySelectorAll('[data-pv]').forEach(b => b.onclick = () => filePreview(r, files, b.dataset.pv, pick));
   if ($('#bAll')) $('#bAll').onclick = () => { document.querySelectorAll('#bfiles input:not([disabled])').forEach(c => c.checked = true); pick(); };
   if ($('#bNone')) $('#bNone').onclick = () => { document.querySelectorAll('#bfiles input').forEach(c => c.checked = false); pick(); };
   $('#mkpdf').onclick = async e => {
@@ -1061,6 +1062,71 @@ function tabGaiyo(){
   };
   const dl = $('#dlpdf'); if (dl) dl.onclick = () => downloadFile(dl, '');
   if ($('#mapedit')) $('#mapedit').onclick = () => mapEditor(d);
+}
+
+/* ===== 資料の中身を見る（PDFは全ページ、画像はそのまま）。読んだ資料はまとめるときにも使い回す ===== */
+S.fileCache = {};
+async function getFileData(r, fid){
+  const k = r.id + ':' + fid;
+  if (!S.fileCache[k]) S.fileCache[k] = api('fileData', { kind: 'deal', id: r.id, fileId: fid }).catch(e => { delete S.fileCache[k]; throw e; });
+  return S.fileCache[k];
+}
+async function filePreview(r, files, fid, onPick){
+  let idx = files.findIndex(f => f.id === fid);
+  const okList = files.filter(f => /pdf|^image\//.test(f.mimeType || '') || /\.(pdf|jpe?g|png|gif|webp|heic|heif)$/i.test(f.name || ''));
+  idx = okList.findIndex(f => f.id === fid);
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;z-index:55;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px';
+  box.innerHTML = `<div class="panel" style="width:min(900px,100%);height:100%;display:flex;flex-direction:column;background:var(--surface);border-radius:10px;padding:12px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn ghost sm" id="pv-p">◀ 前の資料</button><button class="btn ghost sm" id="pv-n">次の資料 ▶</button>
+      <b id="pv-t" style="flex:1;min-width:120px;font-size:13px;overflow-wrap:anywhere"></b>
+      <label style="display:flex;gap:6px;align-items:center;font-size:13px;white-space:nowrap"><input type="checkbox" id="pv-c" style="width:auto">PDFに入れる</label>
+      <button class="btn sm" id="pv-x">閉じる</button></div>
+    <div id="pv-b" style="flex:1;overflow:auto;margin-top:10px;background:#e9ecea;border-radius:6px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:10px"></div></div>`;
+  document.body.appendChild(box);
+  const close = () => { box.remove(); };
+  box.querySelector('#pv-x').onclick = close;
+  box.addEventListener('click', e => { if (e.target === box) close(); });
+  const cb = () => document.querySelector(`#bfiles input[value="${CSS.escape(okList[idx].id)}"]`);
+  box.querySelector('#pv-c').onchange = e => { const c = cb(); if (c) { c.checked = e.target.checked; onPick(); } };
+  let token = 0;
+  const show = async () => {
+    const f = okList[idx], my = ++token, body = box.querySelector('#pv-b');
+    box.querySelector('#pv-t').textContent = (idx + 1) + '/' + okList.length + '　' + f.name;
+    box.querySelector('#pv-p').disabled = idx === 0; box.querySelector('#pv-n').disabled = idx === okList.length - 1;
+    const c = cb(); box.querySelector('#pv-c').checked = !!(c && c.checked);
+    body.innerHTML = '<div class="sub" style="margin:20px"><span class="spin"></span>読み込んでいます…</div>';
+    try {
+      const x = await getFileData(r, f.id);
+      if (my !== token) return;
+      const bytes = b64bytes(x.data), mt = x.mimeType || f.mimeType || '';
+      body.innerHTML = '';
+      if (/pdf/.test(mt) || /\.pdf$/i.test(x.name || '')) {
+        await loadPdfJs();
+        const doc = await window.pdfjsLib.getDocument({ data: bytes }).promise;
+        const n = Math.min(doc.numPages, 30), W = Math.min(820, body.clientWidth - 20);
+        if (doc.numPages > n) body.insertAdjacentHTML('beforeend', `<div class="sub" style="margin:0">全${doc.numPages}ページ（最初の${n}ページを表示）</div>`);
+        for (let i = 1; i <= n; i++) {
+          if (my !== token) { doc.destroy(); return; }
+          const pg = await doc.getPage(i), v1 = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: W / v1.width * (window.devicePixelRatio > 1 ? 1.5 : 1) });
+          const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height; cv.style.cssText = 'width:' + W + 'px;max-width:100%;height:auto;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2)';
+          body.appendChild(cv);
+          await pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+        }
+        doc.destroy();
+      } else {
+        const url = URL.createObjectURL(new Blob([bytes], { type: mt || 'image/jpeg' })), im = new Image();
+        im.style.cssText = 'max-width:100%;height:auto;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2)';
+        im.onload = () => URL.revokeObjectURL(url);
+        im.onerror = () => { body.innerHTML = '<div class="note">この画像はブラウザで表示できない形式です（HEICなど）。PDFにも入れられません。</div>'; };
+        im.src = url; body.appendChild(im);
+      }
+    } catch (e) { if (my === token) body.innerHTML = `<div class="note">表示できませんでした：${esc(e.message)}</div>`; }
+  };
+  box.querySelector('#pv-p').onclick = () => { if (idx > 0) { idx--; show(); } };
+  box.querySelector('#pv-n').onclick = () => { if (idx < okList.length - 1) { idx++; show(); } };
+  show();
 }
 
 /* ===== 概要書＋資料を1つのPDFにまとめる（ブラウザの中で結合。写真はA4のページにする） ===== */
@@ -1103,7 +1169,7 @@ async function bundlePdf(r, chosen, prog){
     const f = chosen[i];
     prog(`資料を取り込んでいます（${i + 1}/${chosen.length}）：${f.name}`);
     try {
-      const x = await api('fileData', { kind: 'deal', id: r.id, fileId: f.id });
+      const x = await getFileData(r, f.id);
       const bytes = b64bytes(x.data), mt = x.mimeType || f.mimeType || '';
       if (/pdf/.test(mt) || /\.pdf$/i.test(x.name || '')) { await addPdf(bytes); continue; }
       const img = await out.embedJpg(await toJpeg(bytes, mt));
