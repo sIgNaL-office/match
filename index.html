@@ -271,7 +271,7 @@ $('#logout').onclick = () => { TOKEN = ''; showLogin(); };
 function boot(){
   if (!TOKEN) { showLogin(); return; }
   api('init').then(d => {
-    Object.assign(S, d);
+    Object.assign(S, d); addTypes();
     LOGO = d.logo || LOGO;
     $('#hdr').hidden = false;
     $('#meName').textContent = S.me.name + (S.me.admin ? '（管理者）' : '');
@@ -281,7 +281,15 @@ function boot(){
     go(S.view === 'detail' ? 'list' : S.view);
   }).catch(e => { if (!/ログイン|登録されていません/.test(e.message)) $('#app').innerHTML = `<div class="err">${esc(e.message)}</div><button class="btn" onclick="boot()">もう一度読み込む</button>`; });
 }
-function refresh(){ return api('init').then(d => { Object.assign(S, d); xBadge(); }); }
+function refresh(){ return api('init').then(d => { Object.assign(S, d); addTypes(); xBadge(); }); }
+// 種別の選択肢に足すもの（サーバー側の一覧に無ければ「その他」の前に入れる）
+const EXTRA_TYPES = ['ホテル', 'ホテル用地'];
+function addTypes(){
+  Object.values(S.specs || {}).forEach(sp => (sp || []).forEach(s => {
+    if ((s.k !== 'shubetsu' && s.k !== 'types') || !Array.isArray(s.o)) return;
+    EXTRA_TYPES.forEach(t => { if (s.o.includes(t)) return; const i = s.o.indexOf('その他'); i >= 0 ? s.o.splice(i, 0, t) : s.o.push(t); });
+  }));
+}
 function xBadge(){ const b = $('#xb'); if (b) { b.textContent = S.xAsk || ''; b.hidden = !S.xAsk; } }
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 function go(view, opt){
@@ -366,7 +374,7 @@ function tobiItem(r){
     <span class="price">${r.exitPrice ? '出口 ' + yen(r.exitPrice) : '出口価格 未入力'}</span></button>`;
 }
 // 種別での絞り込み（「一棟収益」などはまとめて探せる）
-const TYPE_GROUPS = [['一棟収益', /一棟|ビル|アパート/], ['区分', /区分/], ['土地', /土地/], ['戸建', /戸建|一戸建/], ['店舗・事務所', /店舗|事務所/]];
+const TYPE_GROUPS = [['一棟収益', /一棟|ビル|アパート/], ['区分', /区分/], ['土地', /土地/], ['戸建', /戸建|一戸建/], ['店舗・事務所', /店舗|事務所/], ['ホテル', /ホテル/]];
 function typeOpts(k){ const sp = specs(k).find(s => s.k === 'shubetsu' || s.k === 'types'); return sp ? sp.o : []; }
 function typeOk(v, ft){
   if (!ft) return true;
