@@ -342,10 +342,10 @@ const ntcVal = (n, v) => v === '' || v == null ? '' : n.kind === 'deal' ? yen(v)
 function noticeBanner(){
   const list = ntcList();
   if (!list.length || S.ntcClosed) return '';
-  const chip = t => `<span class="chip ${t === '価格変更' || t === '条件変更' ? 'need' : 'newc'}">${esc(t)}</span>`;
+  const chip = t => `<span class="chip ${t === '価格変更' || t === '条件変更' || t === '物件サイト掲載' ? 'need' : 'newc'}">${esc(t)}</span>`;
   const item = n => `<li>${chip(n.type)} <a data-new="${esc(n.kind)}:${esc(n.recId)}">${esc(n.title || (n.kind === 'deal' ? '（物件名 要確認）' : '（顧客名 要確認）'))}</a> <span class="m">${esc([
-      n.type === '価格変更' || n.type === '条件変更' ? ntcVal(n, n.before) + ' → ' + ntcVal(n, n.after) : n.type === '情報更新' ? '空欄を' + String(n.after).split('・').filter(Boolean).length + '項目追加' : ntcVal(n, n.after),
-      '担当 ' + userName(n.owner), n.src === 'メール' ? 'メール取込' : '', String(n.at).slice(5, 16)].filter(Boolean).join('・'))}</span></li>`;
+      n.type === '物件サイト掲載' ? '掲載先 ' + n.after : n.type === '価格変更' || n.type === '条件変更' ? ntcVal(n, n.before) + ' → ' + ntcVal(n, n.after) : n.type === '情報更新' ? '空欄を' + String(n.after).split('・').filter(Boolean).length + '項目追加' : ntcVal(n, n.after),
+      '担当 ' + userName(n.owner), n.src === 'メール' ? 'メール取込' : n.src === '掲載調査' ? '自動調査' : '', String(n.at).slice(5, 16)].filter(Boolean).join('・'))}</span></li>`;
   return `<div class="newbox"><div class="xhead"><b>お知らせ（${list.length}件）</b><button class="btn ghost sm" id="ntcx">閉じる</button></div>
     <p class="sub" style="margin:2px 0 6px">前回アプリを開いてからの新着・価格変更です。</p>
     <ul>${list.map(item).join('')}</ul></div>`;
@@ -420,8 +420,8 @@ function renderList(){
     $('#rows').innerHTML = list.length ? list.map(r => k === 'tobi' ? tobiItem(r) : k === 'deal' ? `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
-        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${recentNtc(r, '価格変更') ? '<span class="chip need">価格変更</span>' : ''}${pubChip(r)}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
-          <span class="m">${esc([r.shubetsu, '担当 ' + userName(r.owner), r.shoryu, '回答' + (S.respCount[r.id] || 0) + '件'].filter(Boolean).join('・'))}</span></span>
+        <span style="min-width:0"><span class="t">${esc(r.title || '（物件名 要確認）')}</span>${isNew(r) ? '<span class="chip newc">NEW</span>' : ''}${recentNtc(r, '価格変更') ? '<span class="chip need">価格変更</span>' : ''}${pubChip(r)}${webChip(r)}${valChip(r)}${(r.dups || []).length ? '<span class="chip need">重複あり</span>' : ''}${r.status && r.status !== '販売中' ? `<span class="chip">${esc(r.status)}</span>` : ''}${missingReq('deal', r) ? '<span class="chip need">要確認あり</span>' : ''}
+          <span class="m">${esc([r.shubetsu, '担当 ' + userName(r.owner), webLabel(r), r.shoryu, '回答' + (S.respCount[r.id] || 0) + '件'].filter(Boolean).join('・'))}</span></span>
         <span class="price">${yen(r.price)}</span></button>` : `
       <button class="item" data-id="${esc(r.id)}">
         <span class="rank ${r.rank || 'none'}">${esc(r.rank || '－')}</span>
@@ -795,7 +795,7 @@ function renderNew(){
     <div class="panel">${formHtml(k, 'nf', {})}</div>`;
   document.querySelectorAll('[data-nk]').forEach(b => b.onclick = () => { S.newKind = b.dataset.nk; renderNew(); });
   bindForm(k, 'nf', null, { onSaved: rec => {
-    if (k === 'deal') go('detail', { dkind: 'deal', did: rec.id, dtab: 'cands', autoMatch: rec.id });
+    if (k === 'deal') { webBg(rec.id); go('detail', { dkind: 'deal', did: rec.id, dtab: 'cands', autoMatch: rec.id }); }
     else if (k === 'need') { xBg('need', rec.id); go('list', { listKind: 'need' }); }
     else if (k === 'tobi') go('detail', { dkind: 'tobi', did: rec.id, dtab: 'owners' });
     else { xBg('buyer', rec.id); go('buyers'); }
@@ -986,7 +986,7 @@ function drawDetail(){
              : kind === 'buyer' ? { info: '取引先情報', hist: '変更履歴', resp: '紹介・回答の実績' } : kind === 'tobi' ? { owners: '地権者', log: '接触・回答の記録', info: '案件情報' } : { info: '買ニーズ情報' };
   if (!tabs[S.dtab]) S.dtab = Object.keys(tabs)[0];
   const title = kind === 'deal' || kind === 'tobi' ? (r.title || r.addr || '（物件名 要確認）') : kind === 'need' ? (r.client || '（顧客名 要確認）') : r.co;
-  const sub = kind === 'deal' ? [r.id, '担当 ' + userName(r.owner), r.shoryu, r.source && '情報元 ' + r.source, yen(r.price), r.status]
+  const sub = kind === 'deal' ? [r.id, '担当 ' + userName(r.owner), r.shoryu, r.source && '情報元 ' + r.source, yen(r.price), r.status, webLabel(r), valLabel(r)]
             : kind === 'need' ? [r.id, '担当 ' + userName(r.owner), r.shoryu, r.budget && '予算 ' + r.budget + '万円', r.status]
             : kind === 'tobi' ? [r.id, '担当 ' + userName(r.owner), r.exitPrice && '予想出口 ' + yen(r.exitPrice), r.lastContact ? '最終接触 ' + r.lastContact : '接触の記録なし']
             : [r.id, r.style, r.person, r.contact];
@@ -1450,12 +1450,109 @@ function mapEditor(d){
   }).catch(err => { toast(err.message, 6000); close(); });
 }
 
+/* ===== 物件サイトの掲載調査（サーバーの「掲載調査.gs」が調べた結果を表示） ===== */
+const WEB_ST = { yes: '掲載あり', maybe: '掲載の可能性あり（要確認）', no: '掲載なし（発見できず）', past: '掲載なし（過去の掲載あり）', err: '調査できず' };
+function webLabel(r){
+  const s = r.webStatus;
+  if (!s) return '掲載調査待ち';
+  if (s === WEB_ST.yes) return '物件サイト掲載あり';
+  if (s === WEB_ST.maybe) return '物件サイト掲載の可能性';
+  if (s === WEB_ST.no) return '物件サイト掲載なし';
+  if (s === WEB_ST.past) return '物件サイト掲載なし（過去に掲載）';
+  return '掲載調査できず';
+}
+const webChip = r => r.webStatus === WEB_ST.yes ? '<span class="chip need">物件サイト掲載あり</span>' : r.webStatus === WEB_ST.maybe ? '<span class="chip need">掲載の可能性</span>' : '';
+const webLinks = r => { try { const a = JSON.parse(r.webLinks || '[]'); return Array.isArray(a) ? a.filter(l => /^https?:\/\//.test(String(l.url || ''))) : []; } catch (e) { return []; } };
+function webBox(d){
+  const r = d.rec, L = webLinks(r);
+  const cls = r.webStatus === WEB_ST.yes || r.webStatus === WEB_ST.maybe ? 'chip need' : r.webStatus === WEB_ST.no ? 'chip priv' : 'chip';
+  const li = l => `<li style="margin:4px 0"><b>${esc(l.site || 'サイト')}</b> <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.title || l.url)}</a>${l.price ? ` <span class="m">${esc(l.price)}</span>` : ''}${l.same ? '' : '<span class="chip">同じ物件か要確認</span>'}${l.ended ? '<span class="chip">掲載終了</span>' : ''}${l.first ? ` <span class="m">（${esc(l.first)} 発見）</span>` : ''}${l.reason ? `<div class="m" style="font-size:12px">${esc(l.reason)}</div>` : ''}</li>`;
+  return `<div class="panel" style="margin-bottom:12px">
+    <div class="xhead"><b>物件サイトの掲載</b><span class="${cls}">${esc(r.webStatus || '調査待ち')}</span></div>
+    <p class="sub" style="margin:4px 0">${r.webAt ? '調査日 ' + esc(r.webAt) + '・' : '登録後に自動で調べます（数分かかります）・'}販売中の案件は1週間ごとに自動で調べ直します。</p>
+    ${r.webNote ? `<p class="note" style="margin:4px 0">${esc(r.webNote)}</p>` : ''}
+    ${L.length ? `<ul style="margin:6px 0;padding-left:18px">${L.map(li).join('')}</ul>` : ''}
+    ${d.canEdit ? '<div class="row" style="margin-top:8px"><button class="btn ghost sm" id="webrun">物件サイトを今すぐ調べ直す</button><span class="sub" style="margin:0">30秒〜1分ほどかかります</span></div>' : ''}
+  </div>`;
+}
+function webApply(rec){
+  if (!rec) return;
+  const i = (S.deals || []).findIndex(x => x.id === rec.id);
+  if (i >= 0) Object.assign(S.deals[i], rec);
+  if (S.cur && S.cur.rec && S.cur.rec.id === rec.id && S.dkind === 'deal') {
+    Object.assign(S.cur.rec, rec);
+    const sb = document.querySelector('#app > p.sub');
+    if (sb) sb.textContent = sb.textContent.replace(/(掲載調査待ち|物件サイト掲載[^・]*|掲載調査できず)/, webLabel(S.cur.rec));
+    const box = document.getElementById('webbox');
+    if (box) { box.innerHTML = webBox(S.cur); bindWeb(S.cur); }
+  }
+}
+function bindWeb(d){
+  const b = document.getElementById('webrun'); if (!b) return;
+  b.onclick = async () => {
+    busy(b, true, '調べています…');
+    try { const x = await api('webCheck', { id: d.rec.id }); webApply(x.rec); toast('物件サイトの掲載を調べました'); }
+    catch (e) { toast(e.message, 6000); busy(b, false); }
+  };
+}
+/* ===== AI査定（サーバーの「査定.gs」の結果を表示） ===== */
+const valOf = r => { try { const v = JSON.parse(r.aiVal || 'null'); return v && typeof v === 'object' ? v : null; } catch (e) { return null; } };
+function valChip(r){
+  const v = valOf(r); if (!v || v.err || !v.verdict || v.verdict === '判断できず') return '';
+  const cls = /割安/.test(v.verdict) ? 'newc' : /割高/.test(v.verdict) ? 'need' : '';
+  return `<span class="chip ${cls}">AI査定 ${esc(v.verdict)}</span>${v.action === '見送り候補' ? '<span class="chip need">見送り候補</span>' : ''}`;
+}
+const valLabel = r => { const v = valOf(r); return v && !v.err && v.verdict ? 'AI査定 ' + v.verdict : ''; };
+function valBox(d){
+  const r = d.rec, v = valOf(r);
+  const btn = d.canEdit ? `<div class="row" style="margin-top:8px"><button class="btn ghost sm" id="valrun">${v ? 'AI査定をやり直す' : 'AI査定する'}</button><span class="sub" style="margin:0">1〜2分ほどかかります</span></div>` : '';
+  if (!v) return `<div class="panel" style="margin-bottom:12px"><div class="xhead"><b>AI査定</b><span class="chip">未査定</span></div><p class="sub" style="margin:4px 0">新しく登録した案件は自動で査定します。前からある案件は「AI査定する」で査定できます。</p>${btn}</div>`;
+  if (v.err) return `<div class="panel" style="margin-bottom:12px"><div class="xhead"><b>AI査定</b><span class="chip">査定できず</span></div><p class="note" style="margin:4px 0">${esc(v.err)}</p>${btn}</div>`;
+  const cls = /割安/.test(v.verdict) ? 'chip newc' : /割高/.test(v.verdict) ? 'chip need' : 'chip';
+  const range = v.low || v.high ? (v.low ? yen(v.low) : '') + '〜' + (v.high ? yen(v.high) : '') : '';
+  const row = (k, x) => x ? `<div style="display:flex;gap:10px;margin:3px 0"><span class="m" style="min-width:8em">${k}</span><b>${x}</b></div>` : '';
+  const stale = v.price && Number(String(r.price).replace(/[^\d.]/g, '')) !== v.price ? `<p class="note" style="margin:4px 0">査定した時の価格は${esc(yen(v.price))}です（価格が変わったので査定し直します）。</p>` : '';
+  return `<div class="panel" style="margin-bottom:12px">
+    <div class="xhead"><b>AI査定</b><span class="${cls}">${esc(v.verdict)}</span>${v.action ? `<span class="chip ${v.action === '見送り候補' ? 'need' : ''}">${esc(v.action)}</span>` : ''}${v.confidence ? `<span class="chip">確からしさ ${esc(v.confidence)}</span>` : ''}</div>
+    ${stale}
+    <div style="margin:6px 0">${row('販売価格', esc(yen(r.price)))}${row('相場（業者間）', esc(range))}${row('すぐ売れる目安', v.quick ? esc(yen(v.quick)) : '')}${row('単価の比較', esc(v.unit || ''))}</div>
+    ${v.summary ? `<p style="margin:6px 0">${esc(v.summary)}</p>` : ''}
+    ${(v.basis || []).length ? `<details style="margin:6px 0"><summary>根拠（${v.basis.length}件）</summary><ul style="margin:6px 0;padding-left:18px">${v.basis.map(b => `<li style="margin:3px 0"><span class="chip" style="margin-left:0">${esc(b.kind)}</span> ${esc(b.text)}${/^https?:\/\//.test(b.url || '') ? ` <a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">出典</a>` : ''}</li>`).join('')}</ul></details>` : ''}
+    ${(v.cautions || []).length ? `<div class="note" style="margin:6px 0">要確認：${v.cautions.map(esc).join('／')}</div>` : ''}
+    <p class="sub" style="margin:4px 0">査定日 ${esc(r.aiValAt || '')}・AIが公示価格・路線価・事例・社内の買付などから出した目安です。最終判断は担当者が行ってください。</p>
+    ${btn}
+  </div>`;
+}
+function valApply(rec){
+  if (!rec) return;
+  const i = (S.deals || []).findIndex(x => x.id === rec.id);
+  if (i >= 0) Object.assign(S.deals[i], rec);
+  if (S.cur && S.cur.rec && S.cur.rec.id === rec.id && S.dkind === 'deal') {
+    Object.assign(S.cur.rec, rec);
+    const sb = document.querySelector('#app > p.sub'), lb = valLabel(S.cur.rec);
+    if (sb && lb) sb.textContent = /AI査定 [^・]*/.test(sb.textContent) ? sb.textContent.replace(/AI査定 [^・]*/, lb) : sb.textContent + '・' + lb;
+    const box = document.getElementById('valbox');
+    if (box) { box.innerHTML = valBox(S.cur); bindVal(S.cur); }
+  }
+}
+function bindVal(d){
+  const b = document.getElementById('valrun'); if (!b) return;
+  b.onclick = async () => {
+    busy(b, true, '査定しています…');
+    try { const x = await api('valuate', { id: d.rec.id }); valApply(x.rec); toast('AI査定が終わりました'); }
+    catch (e) { toast(e.message, 6000); busy(b, false); }
+  };
+}
+// 登録した直後に、裏で掲載を調べてからAI査定する（画面はそのまま使える）
+function webBg(id){ api('webCheck', { id }).then(x => webApply(x && x.rec)).catch(e => console.warn('掲載調査', e)).then(() => api('valuate', { id })).then(x => valApply(x && x.rec)).catch(e => console.warn('AI査定', e)); }
+
 function tabInfo(){
   const kind = S.dkind, d = S.cur;
   const xbtn = d.canEdit && (kind === 'need' || kind === 'buyer') ? '<div class="row" style="margin-bottom:12px"><button class="btn ghost sm" id="runx">他の営業の物件と照らし合わせる</button></div>' : '';
-  $('#dbody').innerHTML = `${xbtn}<div class="panel">${formHtml(kind, 'ef', { edit: true, readonly: !d.canEdit })}${filesHtml(d.files)}</div>`;
+  $('#dbody').innerHTML = `${xbtn}${kind === 'deal' ? '<div id="valbox">' + valBox(d) + '</div><div id="webbox">' + webBox(d) + '</div>' : ''}<div class="panel">${formHtml(kind, 'ef', { edit: true, readonly: !d.canEdit })}${filesHtml(d.files)}</div>`;
   bindForm(kind, 'ef', d.rec, { readonly: !d.canEdit, onSaved: () => renderDetail() });
   bindFiles();
+  if (kind === 'deal') { bindVal(d); bindWeb(d); }
   if (xbtn) bindRunX(kind, d.rec.id);
 }
 
