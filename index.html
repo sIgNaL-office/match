@@ -1466,7 +1466,7 @@ const webLinks = r => { try { const a = JSON.parse(r.webLinks || '[]'); return A
 function webBox(d){
   const r = d.rec, L = webLinks(r);
   const cls = r.webStatus === WEB_ST.yes || r.webStatus === WEB_ST.maybe ? 'chip need' : r.webStatus === WEB_ST.no ? 'chip priv' : 'chip';
-  const li = l => `<li style="margin:4px 0"><b>${esc(l.site || 'サイト')}</b> <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.title || l.url)}</a>${l.price ? ` <span class="m">${esc(l.price)}</span>` : ''}${l.same ? '' : '<span class="chip">同じ物件か要確認</span>'}${l.ended ? '<span class="chip">掲載終了</span>' : ''}${l.first ? ` <span class="m">（${esc(l.first)} 発見）</span>` : ''}${l.reason ? `<div class="m" style="font-size:12px">${esc(l.reason)}</div>` : ''}</li>`;
+  const li = l => `<li style="margin:4px 0"><b>${esc(l.site || 'サイト')}</b> <a href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">${esc(l.title || l.url)}</a>${l.price ? ` <span class="m">${esc(l.price)}</span>` : ''}${l.list ? '<span class="chip">一覧ページ（詳細ページが見つからず）</span>' : ''}${l.same ? '' : '<span class="chip">同じ物件か要確認</span>'}${l.ended ? '<span class="chip">掲載終了（ページに見当たらず）</span>' : l.verified === true ? '<span class="chip priv">ページで確認済み</span>' : l.verified === null ? '<span class="chip">サイトの都合で未確認</span>' : ''}${l.first ? ` <span class="m">（${esc(l.first)} 発見）</span>` : ''}${l.reason ? `<div class="m" style="font-size:12px">${esc(l.reason)}</div>` : ''}</li>`;
   return `<div class="panel" style="margin-bottom:12px">
     <div class="xhead"><b>物件サイトの掲載</b><span class="${cls}">${esc(r.webStatus || '調査待ち')}</span></div>
     <p class="sub" style="margin:4px 0">${r.webAt ? '調査日 ' + esc(r.webAt) + '・' : '登録後に自動で調べます（数分かかります）・'}販売中の案件は1週間ごとに自動で調べ直します。</p>
