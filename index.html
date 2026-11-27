@@ -130,6 +130,14 @@ h2{font-family:var(--font-d);font-size:16px;margin:0 0 10px}
 .drop input{border:0;padding:6px 0;background:transparent}
 .drop small{font-size:11.5px}
 .section-label{font-size:11.5px;letter-spacing:.08em;color:var(--green);font-weight:700;margin:18px 0 8px}
+.adv{border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin:-4px 0 12px;background:var(--surface)}
+.adv summary{cursor:pointer;font-weight:700;font-size:13px;color:var(--accent)}
+.adv .ag{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px 14px;margin-top:10px}
+.adv .ag label.al{display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+.adv .rg{display:flex;align-items:center;gap:4px;font-size:13px}
+.adv .rg input{width:6.5em;min-width:0;flex:none}
+.adv .rg select{min-width:0;width:100%}
+.adv .af{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:var(--muted)}
 details.more{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
 details.more summary{cursor:pointer;font-weight:700;font-size:13px;color:var(--accent)}
 details.more .grid{margin-top:12px}
@@ -382,6 +390,106 @@ function typeOk(v, ft){
   if (ft.indexOf('g:') === 0) { const g = TYPE_GROUPS.find(x => x[0] === ft.slice(2)); return !!g && g[1].test(v); }
   return v.split(/[、,／\/]/).map(x => x.trim()).indexOf(ft) >= 0 || v === ft;
 }
+/* ===== 詳しい条件で絞り込む（利回り・土地面積など） ===== */
+// 数字の取り出し（全角・カンマ・「億」に対応）
+const zen = v => String(v == null ? '' : v).replace(/[０-９．％]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/[,，]/g, '');
+const fnum = v => { const t = zen(v).trim(); if (!t) return null; const m = t.match(/^(\d+(?:\.\d+)?)億(?:(\d+(?:\.\d+)?)万?)?/); if (m) return Number(m[1]) * 10000 + Number(m[2] || 0); const n = t.match(/\d+(?:\.\d+)?/); return n ? Number(n[0]) : null; };
+// 項目は表示名で探す（サーバーの項目定義に合わせる）
+function advVal(k, r, re, keys){
+  for (const key of keys) if (r[key] != null && String(r[key]).trim() !== '') return String(r[key]);
+  const sp = (specs(k) || []).filter(s => re.test(s.l || ''));
+  for (const x of sp) if (r[x.k] != null && String(r[x.k]).trim() !== '') return String(r[x.k]);
+  return '';
+}
+// 面積→坪（「98.50㎡（29.79坪）」は坪の数字、㎡だけなら坪に直す）
+function tsubo(v){
+  const t = zen(v); if (!t.trim()) return null;
+  const a = t.match(/(\d+(?:\.\d+)?)\s*坪/); if (a) return Number(a[1]);
+  const b = t.match(/(\d+(?:\.\d+)?)\s*(?:㎡|m2|m²|平米|平方メートル)/i); if (b) return Number(b[1]) / 3.30579;
+  return null;
+}
+const yieldOf = v => { const t = zen(v); const m = t.match(/(\d+(?:\.\d+)?)\s*[%％]/) || t.match(/^\s*(\d+(?:\.\d+)?)\s*$/); return m ? Number(m[1]) : null; };
+// 築年→西暦（「1990年」「平成2年」「昭和63年3月」「築25年」）
+function builtYear(v){
+  const t = zen(v); if (!t.trim()) return null;
+  const era = { 明治: 1867, 大正: 1911, 昭和: 1925, 平成: 1988, 令和: 2018 };
+  const w = t.match(/(明治|大正|昭和|平成|令和)\s*(\d+|元)\s*年/); if (w) return era[w[1]] + (w[2] === '元' ? 1 : Number(w[2]));
+  const y = t.match(/(19|20)\d{2}/); if (y) return Number(y[0]);
+  const c = t.match(/築\s*(\d+)\s*年/); if (c) return new Date().getFullYear() - Number(c[1]);
+  return null;
+}
+const walkMin = v => { const xs = [...zen(v).matchAll(/徒歩\s*(?:約)?\s*(\d+)\s*分/g)].map(m => Number(m[1])); return xs.length ? Math.min(...xs) : null; };
+// 区市町村（番地は使わない）
+function cityOf(addr){
+  const t = String(addr || '').replace(/^(東京都|北海道|(?:京都|大阪)府|.{2,3}県)/, '');
+  const m = t.match(/^(.+?市.+?区|.+?郡.+?[町村]|.+?[市区町村])/); return m ? m[1] : '';
+}
+const ADV_DEF = {
+  deal: [
+    { id: 'price', l: '販売価格', u: '万円', get: r => fnum(r.price) },
+    { id: 'land', l: '土地面積', u: '坪', get: r => tsubo(advVal('deal', r, /土地面積|敷地面積/, ['kobo', 'jissoku'])) },
+    { id: 'floor', l: '延床面積', u: '坪', get: r => tsubo(advVal('deal', r, /延床|延べ床/, ['nobeyuka'])) },
+    { id: 'yield', l: '表面利回り', u: '％', get: r => yieldOf(advVal('deal', r, /利回/, ['rimawari'])) },
+    { id: 'tsubo', l: '坪単価（土地）', u: '万円', get: r => { const p = fnum(r.price), a = tsubo(advVal('deal', r, /土地面積|敷地面積/, ['kobo', 'jissoku'])); return p && a ? p / a : null; } },
+    { id: 'age', l: '築年数', u: '年', get: r => { const y = builtYear(advVal('deal', r, /築年/, ['chikunen'])); return y ? new Date().getFullYear() - y : null; } },
+    { id: 'walk', l: '駅徒歩', u: '分', max: 1, get: r => walkMin(advVal('deal', r, /交通|最寄/, ['kotsu'])) }
+  ],
+  need: [{ id: 'budget', l: '予算', u: '万円', get: r => fnum(r.budget) }],
+  tobi: [{ id: 'exit', l: '出口価格', u: '万円', get: r => fnum(r.exitPrice) }]
+};
+S.adv = S.adv || {};
+function advHtml(k, rows){
+  const a = S.adv[k] = S.adv[k] || {};
+  const v = id => a[id] == null ? '' : esc(a[id]);
+  const rng = d => `<div><label class="al">${d.l}（${d.u}）</label><div class="rg">${d.max ? '' : `<input inputmode="decimal" data-adv="${d.id}:min" value="${v(d.id + ':min')}" placeholder="下限" aria-label="${d.l} 下限">〜`}<input inputmode="decimal" data-adv="${d.id}:max" value="${v(d.id + ':max')}" placeholder="${d.max ? '○' + d.u + '以内' : '上限'}" aria-label="${d.l} 上限"></div></div>`;
+  const sel = (id, l, opts) => `<div><label class="al">${l}</label><div class="rg"><select data-adv="${id}"><option value="">指定なし</option>${opts.map(o => `<option${a[id] === o ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></div></div>`;
+  let extra = '';
+  if (k === 'deal') {
+    const cities = [...new Set(rows.map(r => cityOf(r.addr)).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'ja'));
+    const yoto = [...new Set(rows.map(r => advVal('deal', r, /用途地域/, ['yoto'])).join('、').split(/[、,／\/・\n]/).map(x => x.trim()).filter(x => /地域|地区/.test(x) && x.length < 16))].sort();
+    extra = sel('city', '区市町村', cities) + sel('yoto', '用途地域', yoto) + sel('rank', 'ランク', S.ranks || [])
+      + sel('web', '物件サイト', ['掲載なし（未公開の可能性）', '掲載あり・可能性あり', 'まだ調べていない'])
+      + sel('val', 'AI査定', ['割安・やや割安', '相場並み', 'やや割高・割高', '見送り候補を除く', '未査定']);
+  } else if (k === 'tobi') {
+    extra = sel('city', '区市町村', [...new Set(rows.map(r => cityOf(r.addr)).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'ja')));
+  }
+  const n = advCount(k);
+  return `<details class="adv" id="advbox"${S.advOpen ? ' open' : ''}><summary>詳しい条件で絞り込む${n ? `（${n}件の条件）` : ''}</summary>
+    <div class="ag">${ADV_DEF[k].map(rng).join('')}${extra}</div>
+    <div class="af"><label class="inline"><input type="checkbox" id="advblank"${a.blank ? ' checked' : ''}>数字が空欄（要確認）の案件も表示</label><button class="btn ghost sm" id="advclr" type="button">条件をクリア</button><span id="advn"></span></div>
+  </details>`;
+}
+const advCount = k => Object.entries(S.adv[k] || {}).filter(([x, v]) => x !== 'blank' && v !== '' && v != null).length;
+function advOk(k, r){
+  const a = S.adv[k] || {};
+  for (const d of ADV_DEF[k]) {
+    const lo = fnum(a[d.id + ':min']), hi = fnum(a[d.id + ':max']);
+    if (lo == null && hi == null) continue;
+    const x = d.get(r);
+    if (x == null) { if (a.blank) continue; return false; }
+    if (lo != null && x < lo - 1e-9) return false;
+    if (hi != null && x > hi + 1e-9) return false;
+  }
+  if (a.city && cityOf(r.addr) !== a.city) return false;
+  if (k !== 'deal') return true;
+  if (a.yoto && advVal('deal', r, /用途地域/, ['yoto']).indexOf(a.yoto) < 0) return false;
+  if (a.rank && r.rank !== a.rank) return false;
+  if (a.web) {
+    const w = r.webStatus || '';
+    const ok = a.web === '掲載なし（未公開の可能性）' ? (w === WEB_ST.no || w === WEB_ST.past)
+      : a.web === '掲載あり・可能性あり' ? (w === WEB_ST.yes || w === WEB_ST.maybe) : !w;
+    if (!ok) return false;
+  }
+  if (a.val) {
+    const v = valOf(r), vd = v && !v.err ? v.verdict || '' : '';
+    if (a.val === '未査定') { if (vd) return false; }
+    else if (a.val === '見送り候補を除く') { if (v && v.action === '見送り候補') return false; }
+    else if (a.val === '相場並み') { if (vd !== '相場並み') return false; }
+    else if (!(a.val.indexOf('割安') >= 0 ? /割安/ : /割高/).test(vd)) return false;
+  }
+  return true;
+}
+
 function renderList(){
   const k = S.listKind;
   const rows = k === 'deal' ? S.deals : k === 'tobi' ? (S.tobis || []) : S.needs;
@@ -400,6 +508,7 @@ function renderList(){
       <select id="fsort" aria-label="並び順">${[['new', '登録日が新しい順'], ['old', '登録日が古い順'], ['rank', '優先度順（S→D）']].map(([v, t]) => `<option value="${v}"${(S.sort || 'new') === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
       ${k !== 'need' ? `<div class="seg" role="group" aria-label="表示"><button data-lv="list" aria-pressed="${!S.mapView}">リスト</button><button data-lv="map" aria-pressed="${!!S.mapView}">マップで見る</button></div>` : ''}
     </div>
+    ${advHtml(k, rows)}
     <div class="list" id="rows"></div>`;
   document.querySelectorAll('[data-lk]').forEach(b => b.onclick = () => { S.listKind = b.dataset.lk; renderList(); });
   const nx = $('#newx'); if (nx) nx.onclick = () => { S.newClosed = true; renderList(); };
@@ -409,7 +518,8 @@ function renderList(){
   document.querySelectorAll('[data-new]').forEach(a => a.onclick = () => { const [kk, id] = a.dataset.new.split(':'); go('detail', { dkind: kk, did: id, dtab: kk === 'deal' ? 'gaiyo' : 'info' }); });
   const draw = () => {
     const q = $('#q').value.trim(), fo = $('#fo').value, fs = $('#fs').value, ft = S.ftype = $('#ft').value;
-    const list = rows.filter(r => (!fo || r.owner === fo) && typeOk(k === 'need' ? r.types : r.shubetsu, ft) && (!fs || (r.status || statuses[0]) === fs) && (!q || JSON.stringify([r.title, r.addr, r.client, r.area, r.id, r.chiban, r.landlord]).indexOf(q) >= 0));
+    const list = rows.filter(r => (!fo || r.owner === fo) && typeOk(k === 'need' ? r.types : r.shubetsu, ft) && (!fs || (r.status || statuses[0]) === fs) && (!q || JSON.stringify([r.title, r.addr, r.client, r.area, r.id, r.chiban, r.landlord]).indexOf(q) >= 0) && advOk(k, r));
+    const an = $('#advn'); if (an) an.textContent = advCount(k) ? list.length + '件が該当' : '';
     S.sort = $('#fsort').value;
     const age = r => String(r.created || '') + ' ' + String(r.id || '');
     const rk = r => { const i = S.ranks.indexOf(r.rank); return i < 0 ? 99 : i; };
@@ -432,6 +542,11 @@ function renderList(){
     document.querySelectorAll('#rows .item').forEach(b => b.onclick = () => go('detail', { dkind: k, did: b.dataset.id, dtab: k === 'deal' ? 'gaiyo' : k === 'tobi' ? 'owners' : 'info' }));
   };
   ['q', 'fo', 'fs', 'ft', 'fsort'].forEach(id => $('#' + id).oninput = draw);
+  const advSum = () => { const sm = document.querySelector('#advbox summary'), n = advCount(k); if (sm) sm.textContent = '詳しい条件で絞り込む' + (n ? '（' + n + '件の条件）' : ''); };
+  document.querySelectorAll('[data-adv]').forEach(el => el.oninput = () => { S.adv[k][el.dataset.adv] = el.value.trim(); advSum(); draw(); });
+  const ab = $('#advblank'); if (ab) ab.onchange = () => { S.adv[k].blank = ab.checked; draw(); };
+  const ac = $('#advclr'); if (ac) ac.onclick = () => { S.adv[k] = {}; S.advOpen = true; renderList(); };
+  const ad = $('#advbox'); if (ad) ad.ontoggle = () => { S.advOpen = ad.open; };
   document.querySelectorAll('[data-stale]').forEach(a => a.onclick = () => go('detail', { dkind: 'tobi', did: a.dataset.stale, dtab: 'owners' }));
   draw();
 }
@@ -500,7 +615,7 @@ function placePins(){
   // 公開されていない案件：約1km四方の範囲を点線の円で（同じ範囲のものは1つにまとめる）
   const fo = $('#fo') ? $('#fo').value : '', fs = $('#fs') ? $('#fs').value : '';
   const ft = $('#ft') ? $('#ft').value : '';
-  const hid = (S.geoHidden[k] || []).filter(h => (!fo || h.owner === fo) && (!fs || (S.closedStatus || []).indexOf(fs) < 0) && typeOk(String(h.sum || '').split('／')[0], ft));
+  const hid = (S.geoHidden[k] || []).filter(h => (!fo || h.owner === fo) && (!fs || (S.closedStatus || []).indexOf(fs) < 0) && typeOk(String(h.sum || '').split('／')[0], ft) && !advCount(k));
   const cells = {};
   hid.forEach(h => { const key = h.cell.join(','); (cells[key] = cells[key] || []).push(h); });
   Object.values(cells).forEach(hs => {
